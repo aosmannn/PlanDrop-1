@@ -4,7 +4,7 @@ import { getSessionId } from "@/lib/session-id";
 import { usePlanClaims } from "@/hooks/usePlanClaims";
 import { CheckmarkCircle02Icon, MapsIcon, ZapIcon } from "@hugeicons/core-free-icons";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   canShowPlanMapPreview,
@@ -21,10 +21,13 @@ import {
   getClaimedPlanId,
   getStoredAiPlan,
   getStoredArea,
+  getStoredRadiusMiles,
   isClaimBanned,
   mergeAiPlanIntoStorage,
   setClaimedPlanId,
+  setStoredRadiusMiles,
 } from "@/lib/claim-storage";
+import { parseRadiusMilesParam } from "@/lib/search-radius";
 import { buildGoHref } from "@/lib/claim-links";
 import { buildGoogleMapsHref } from "@/lib/maps-links";
 import { activityBulletsForDisplay } from "@/lib/plan-display";
@@ -45,6 +48,7 @@ export function ClaimPlanClient({
   snapshotFromQuery: string | null;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [plan, setPlan] = useState<Plan | null>(staticPlan);
   const [resolved, setResolved] = useState(!!staticPlan);
   const [claiming, setClaiming] = useState(false);
@@ -60,6 +64,13 @@ export function ClaimPlanClient({
   useEffect(() => {
     setExistingClaim(getClaimedPlanId());
   }, []);
+
+  useEffect(() => {
+    const raw = searchParams.get("radius");
+    if (raw != null && raw.trim() !== "") {
+      setStoredRadiusMiles(parseRadiusMilesParam(raw));
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const tick = () => setClaimBlocked(isClaimBanned());
@@ -96,7 +107,8 @@ export function ClaimPlanClient({
   }, [planId, staticPlan, snapshotFromQuery]);
 
   const area = areaFromQuery ?? getStoredArea() ?? "Atlanta, GA";
-  const plansBack = buildPlansHref(area);
+  const radiusMiles = getStoredRadiusMiles();
+  const plansBack = buildPlansHref(area, radiusMiles);
 
   const alreadyClaimedThis = existingClaim === planId;
   const alreadyClaimedOther =
@@ -133,12 +145,7 @@ export function ClaimPlanClient({
 
     setClaimedPlanId(plan.id);
     setClaiming(false);
-
-    const q = new URLSearchParams();
-    if (area.trim()) q.set("area", area.trim());
-    if (plan.id.startsWith("ai-")) q.set("snapshot", planToSnapshot(plan));
-    const qs = q.toString();
-    router.push(qs ? `/go/${plan.id}?${qs}` : `/go/${plan.id}`);
+    router.push(buildGoHref(plan, area, radiusMiles));
   }
 
   if (!resolved) {
@@ -297,7 +304,7 @@ export function ClaimPlanClient({
                 href={(() => {
                   const p = getPlanById(existingClaim!) ?? getStoredAiPlan(existingClaim!);
                   return p
-                    ? buildGoHref(p, area)
+                    ? buildGoHref(p, area, radiusMiles)
                     : `/go/${existingClaim}`;
                 })()}
                 className="font-semibold text-brand underline decoration-brand/30"
@@ -353,11 +360,7 @@ export function ClaimPlanClient({
               <HugeIcon icon={CheckmarkCircle02Icon} size={18} />
               You&apos;ve already locked this plan.{" "}
               <Link
-                href={
-                  plan.id.startsWith("ai-") && area.trim()
-                    ? `/go/${plan.id}?area=${encodeURIComponent(area.trim())}&snapshot=${encodeURIComponent(planToSnapshot(plan))}`
-                    : `/go/${plan.id}`
-                }
+                href={buildGoHref(plan, area, radiusMiles)}
                 className="font-semibold underline"
               >
                 Crew briefing →

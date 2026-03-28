@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
 import { generateAiPlansForArea } from "@/lib/ai-plans-generate";
+import { clampRadiusMiles } from "@/lib/search-radius";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  let body: { area?: string; lat?: number; lng?: number };
+  let body: { area?: string; lat?: number; lng?: number; radiusMiles?: number };
   try {
-    body = (await req.json()) as { area?: string; lat?: number; lng?: number };
+    body = (await req.json()) as {
+      area?: string;
+      lat?: number;
+      lng?: number;
+      radiusMiles?: number;
+    };
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
@@ -24,9 +30,13 @@ export async function POST(req: Request) {
     typeof body.lng === "number" && Number.isFinite(body.lng)
       ? body.lng
       : undefined;
+  const radiusMiles =
+    typeof body.radiusMiles === "number" && Number.isFinite(body.radiusMiles)
+      ? clampRadiusMiles(body.radiusMiles)
+      : undefined;
 
   try {
-    const plans = await generateAiPlansForArea(area, lat, lng);
+    const plans = await generateAiPlansForArea(area, lat, lng, radiusMiles);
     return NextResponse.json({ plans });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";

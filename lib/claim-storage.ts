@@ -1,12 +1,17 @@
 /** Client-only session keys for the demo claim flow (no server yet). */
 
 import type { Plan } from "@/lib/plans-data";
+import {
+  clampRadiusMiles,
+  DEFAULT_RADIUS_MILES,
+} from "@/lib/search-radius";
 
 export const AREA_KEY = "plandrop_area";
 export const CLAIM_KEY = "plandrop_claim_plan_id";
 export const PIN_KEY = "plandrop_pin";
 /** Set when user searches by ZIP/city/location so /drop can skip to browse. */
 export const SKIP_DROP_KEY = "plandrop_skip_drop";
+export const RADIUS_MILES_KEY = "plandrop_radius_miles";
 export const AI_PLANS_MAP_KEY = "plandrop_ai_plans_map";
 /** Count of “release plan” actions this session (claim → release cycles). */
 export const RELEASE_STRIKE_KEY = "plandrop_release_strikes";
@@ -32,6 +37,26 @@ export function setStoredArea(area: string): void {
   if (typeof window === "undefined") return;
   try {
     sessionStorage.setItem(AREA_KEY, area.trim());
+  } catch {
+    /* ignore */
+  }
+}
+
+export function getStoredRadiusMiles(): number {
+  if (typeof window === "undefined") return DEFAULT_RADIUS_MILES;
+  try {
+    const raw = sessionStorage.getItem(RADIUS_MILES_KEY);
+    if (!raw) return DEFAULT_RADIUS_MILES;
+    return clampRadiusMiles(Number.parseInt(raw, 10));
+  } catch {
+    return DEFAULT_RADIUS_MILES;
+  }
+}
+
+export function setStoredRadiusMiles(miles: number): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(RADIUS_MILES_KEY, String(clampRadiusMiles(miles)));
   } catch {
     /* ignore */
   }
@@ -182,9 +207,16 @@ export function clearStoredPin(): void {
 }
 
 /** Works on server and client when `area` is passed from searchParams. */
-export function buildPlansHref(area: string | null | undefined): string {
+export function buildPlansHref(
+  area: string | null | undefined,
+  radiusMiles?: number | null,
+): string {
   if (!area || !area.trim()) return "/plans";
-  return `/plans?area=${encodeURIComponent(area.trim())}`;
+  const r =
+    radiusMiles != null && Number.isFinite(radiusMiles)
+      ? clampRadiusMiles(radiusMiles)
+      : DEFAULT_RADIUS_MILES;
+  return `/plans?area=${encodeURIComponent(area.trim())}&radius=${String(r)}`;
 }
 
 export function setSkipDropFromLocation(): void {

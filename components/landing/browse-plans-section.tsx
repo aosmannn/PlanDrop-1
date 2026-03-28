@@ -17,7 +17,7 @@ import {
   UserMultiple02Icon,
 } from "@hugeicons/core-free-icons";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useId, useMemo, useState } from "react";
 import type { IconSvgElement } from "@hugeicons/react";
 import { ClaimBanModal } from "@/components/claim-ban-modal";
@@ -43,8 +43,13 @@ import {
   releaseClaim,
   setStoredAiPlansMap,
   setStoredArea,
+  setStoredRadiusMiles,
   buildPlansHref,
 } from "@/lib/claim-storage";
+import {
+  clampRadiusMiles,
+  parseRadiusMilesParam,
+} from "@/lib/search-radius";
 import type { Plan } from "@/lib/plans-data";
 import { PLANS, getPlanById } from "@/lib/plans-data";
 
@@ -62,10 +67,13 @@ const filters: {
   { id: "p4", label: "4+", icon: UserGroupIcon },
 ];
 
+const RADIUS_OPTIONS_MI = [5, 10, 15, 25, 30] as const;
+
 function PlanDetailModal({
   plan,
   onClose,
   area,
+  radiusMiles,
   claimedId,
   globalClaimed,
   onClaimClick,
@@ -74,6 +82,7 @@ function PlanDetailModal({
   plan: Plan | null;
   onClose: () => void;
   area: string | null;
+  radiusMiles: number;
   claimedId: string | null;
   globalClaimed: Set<string>;
   onClaimClick: (e: React.MouseEvent) => void;
@@ -99,8 +108,8 @@ function PlanDetailModal({
   if (!plan) return null;
 
   const vibeLabel = plan.meta.split("·")[0].trim();
-  const claimHref = buildClaimHref(plan, area);
-  const goHref = buildGoHref(plan, area);
+  const claimHref = buildClaimHref(plan, area, radiusMiles);
+  const goHref = buildGoHref(plan, area, radiusMiles);
   const isMine = claimedId === plan.id;
   const hasOtherClaim = claimedId !== null && claimedId !== plan.id;
   const isClaimedByAnyone = globalClaimed.has(plan.id);
@@ -261,7 +270,7 @@ function PlanDetailModal({
                 <Link
                   href={
                     claimedPlanResolved
-                      ? buildGoHref(claimedPlanResolved, area)
+                      ? buildGoHref(claimedPlanResolved, area, radiusMiles)
                       : `/go/${claimedId}`
                   }
                   onClick={onClose}
@@ -413,8 +422,12 @@ function planMatchesFilter(plan: Plan, filterId: string): boolean {
 }
 
 function BrowsePlansSectionInner() {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const urlArea = searchParams.get("area")?.trim() ?? "";
+  const radiusMiles = parseRadiusMilesParam(searchParams.get("radius"));
+  const isHomePage = pathname === "/";
   const [storageArea, setStorageArea] = useState("");
 
   useEffect(() => {
@@ -427,6 +440,10 @@ function BrowsePlansSectionInner() {
   }, [urlArea]);
 
   const areaTrim = urlArea || storageArea;
+
+  useEffect(() => {
+    if (areaTrim) setStoredRadiusMiles(radiusMiles);
+  }, [areaTrim, radiusMiles]);
 
   const claimedId = useClaimedPlanId();
   const globalClaimed = usePlanClaims();
@@ -467,8 +484,14 @@ function BrowsePlansSectionInner() {
       setAiError(null);
       try {
         const pin = getStoredPin();
-        const body: { area: string; lat?: number; lng?: number } = {
+        const body: {
+          area: string;
+          lat?: number;
+          lng?: number;
+          radiusMiles: number;
+        } = {
           area: areaTrim,
+          radiusMiles,
         };
         if (pin) {
           body.lat = pin.lat;
@@ -503,7 +526,7 @@ function BrowsePlansSectionInner() {
     return () => {
       cancelled = true;
     };
-  }, [areaTrim]);
+  }, [areaTrim, radiusMiles]);
 
   const boardPlans = useMemo(() => {
     if (!areaTrim) {
@@ -560,10 +583,20 @@ function BrowsePlansSectionInner() {
 
   const lockedPlanGoHref =
     lockedPlan != null
-      ? buildGoHref(lockedPlan, areaForLinks)
+      ? buildGoHref(lockedPlan, areaForLinks, radiusMiles)
       : claimedId
         ? `/go/${claimedId}`
         : "#";
+
+  function onRadiusChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const r = clampRadiusMiles(Number.parseInt(e.target.value, 10));
+    setStoredRadiusMiles(r);
+    if (areaTrim) {
+      router.replace(
+        `/plans?area=${encodeURIComponent(areaTrim)}&radius=${String(r)}`,
+      );
+    }
+  }
 
   function onClaimClick(e: React.MouseEvent) {
     if (isClaimBanned()) {
@@ -616,6 +649,7 @@ function BrowsePlansSectionInner() {
         plan={detailPlan}
         onClose={() => setDetailPlan(null)}
         area={areaForLinks}
+        radiusMiles={radiusMiles}
         claimedId={claimedId}
         globalClaimed={globalClaimed}
         onClaimClick={onClaimClick}
@@ -677,7 +711,7 @@ function BrowsePlansSectionInner() {
                 <Link
                   href={
                     firstOpenPlan
-                      ? buildClaimHref(firstOpenPlan, areaForLinks)
+                      ? buildClaimHref(firstOpenPlan, areaForLinks, radiusMiles)
                       : "#plans"
                   }
                   onClick={firstOpenPlan ? onClaimClick : undefined}
@@ -719,12 +753,35 @@ function BrowsePlansSectionInner() {
               ) : null}
             </div>
             {boardPlans.length > 0 ? (
-              <Link
-                href={areaTrim ? buildPlansHref(areaTrim) : "/plans"}
-                className="shrink-0 self-start text-sm font-semibold text-zinc-900 underline decoration-zinc-400 underline-offset-4 transition hover:decoration-brand hover:text-brand sm:mt-8"
-              >
-                Show all {boardPlans.length} plans →
-              </Link>
+              <div className="flex flex-wrap items-center gap-3 sm:mt-8">
+                <Link
+                  href={
+                    isHomePage || !areaTrim
+                      ? "/plans"
+                      : buildPlansHref(areaTrim, radiusMiles)
+                  }
+                  className="shrink-0 self-start text-sm font-semibold text-zinc-900 underline decoration-zinc-400 underline-offset-4 transition hover:decoration-brand hover:text-brand"
+                >
+                  Show all {boardPlans.length} plans →
+                </Link>
+                {areaTrim ? (
+                  <label className="inline-flex h-10 items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-700 shadow-sm sm:px-3.5">
+                    <span className="hidden text-zinc-500 sm:inline">Within</span>
+                    <select
+                      value={String(radiusMiles)}
+                      onChange={onRadiusChange}
+                      aria-label="Search radius in miles"
+                      className="max-w-[5.5rem] cursor-pointer border-0 bg-transparent py-1 text-sm font-semibold text-zinc-900 focus:outline-none focus:ring-0"
+                    >
+                      {RADIUS_OPTIONS_MI.map((mi) => (
+                        <option key={mi} value={String(mi)}>
+                          {mi} mi
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+              </div>
             ) : areaTrim && !aiLoading ? (
               <Link
                 href="/#hero-locate"
@@ -940,7 +997,7 @@ function BrowsePlansSectionInner() {
                           {isMine ? (
                             <div className="flex w-full flex-col gap-2 sm:order-2 sm:w-auto sm:min-w-[200px]">
                               <Link
-                                href={buildGoHref(plan, areaForLinks)}
+                                href={buildGoHref(plan, areaForLinks, radiusMiles)}
                                 className="block w-full shrink-0 rounded-lg bg-brand px-3 py-2.5 text-center text-xs font-bold text-white shadow-sm transition-all hover:bg-brand-hover"
                               >
                                 Your plan →
@@ -981,7 +1038,7 @@ function BrowsePlansSectionInner() {
                             </button>
                           ) : (
                             <Link
-                              href={buildClaimHref(plan, areaForLinks)}
+                              href={buildClaimHref(plan, areaForLinks, radiusMiles)}
                               onClick={onClaimClick}
                               className="w-full shrink-0 rounded-lg bg-brand px-3 py-2.5 text-center text-xs font-bold text-white shadow-sm transition-all hover:bg-brand-hover sm:order-2 sm:w-auto"
                             >

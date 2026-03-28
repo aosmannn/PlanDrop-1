@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { ClaimPlanClient } from "./claim-client";
 import { getPlanById } from "@/lib/plans-data";
 
@@ -27,11 +28,13 @@ export default async function ClaimPlanPage({ params, searchParams }: Props) {
   const staticPlan = getPlanById(planId);
 
   return (
-    <ClaimPlanClient
-      planId={planId}
-      staticPlan={staticPlan ?? null}
-      areaFromQuery={areaFromQuery ?? null}
-      snapshotFromQuery={snapshotFromQuery ?? null}
-    />
+    <Suspense fallback={null}>
+      <ClaimPlanClient
+        planId={planId}
+        staticPlan={staticPlan ?? null}
+        areaFromQuery={areaFromQuery ?? null}
+        snapshotFromQuery={snapshotFromQuery ?? null}
+      />
+    </Suspense>
   );
 }

@@ -13,6 +13,7 @@ import {
   clearSkipDropFromLocation,
   getSkipDropFromLocation,
   getStoredArea,
+  getStoredRadiusMiles,
   setStoredArea,
   setStoredPin,
   type StoredPin,
@@ -128,7 +129,7 @@ function DropPageInner() {
     const stored = getStoredArea();
     if (getSkipDropFromLocation() && stored) {
       clearSkipDropFromLocation();
-      router.replace(buildPlansHref(stored));
+      router.replace(buildPlansHref(stored, getStoredRadiusMiles()));
     }
   }, [router, searchParams]);
 
@@ -160,7 +161,7 @@ function DropPageInner() {
     e.preventDefault();
     const trimmed = area.trim() || DEFAULT_AREA;
     setStoredArea(trimmed);
-    router.push(buildPlansHref(trimmed));
+    router.push(buildPlansHref(trimmed, getStoredRadiusMiles()));
   }
 
   return (

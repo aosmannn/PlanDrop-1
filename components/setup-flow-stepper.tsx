@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { buildPlansHref, getStoredArea } from "@/lib/claim-storage";
+import {
+  buildPlansHref,
+  getStoredArea,
+  getStoredRadiusMiles,
+} from "@/lib/claim-storage";
 
 const STEP_LABELS = [
   { step: 1 as const, title: "Drop a pin", path: "/drop" },
@@ -25,12 +29,15 @@ export function SetupFlowStepper({
   areaHint?: string | null;
 }) {
   const browseHref = useMemo(() => {
-    if (areaHint != null && areaHint !== "") return buildPlansHref(areaHint);
+    const r =
+      typeof window !== "undefined" ? getStoredRadiusMiles() : undefined;
+    if (areaHint != null && areaHint !== "")
+      return buildPlansHref(areaHint, r);
     if (typeof window !== "undefined") {
       const q = new URLSearchParams(window.location.search).get("area");
-      if (q) return buildPlansHref(q);
+      if (q) return buildPlansHref(q, r);
       const stored = getStoredArea();
-      if (stored) return buildPlansHref(stored);
+      if (stored) return buildPlansHref(stored, r);
     }
     return "/plans";
   }, [areaHint]);
@@ -49,11 +56,13 @@ export function SetupFlowStepper({
           if (s.step === 1) {
             const stored =
               typeof window !== "undefined" ? getStoredArea() : null;
+            const r =
+              typeof window !== "undefined" ? getStoredRadiusMiles() : undefined;
             const fromStored =
-              stored && stored.trim() ? buildPlansHref(stored) : null;
+              stored && stored.trim() ? buildPlansHref(stored, r) : null;
             href =
               areaHint != null && areaHint !== ""
-                ? buildPlansHref(areaHint)
+                ? buildPlansHref(areaHint, r)
                 : (fromStored ?? "/drop");
           } else if (s.step === 2) href = browseHref;
           else if (s.step === 3) {

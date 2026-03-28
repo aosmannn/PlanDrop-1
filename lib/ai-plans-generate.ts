@@ -6,6 +6,11 @@ import {
   timeFromStop,
 } from "@/lib/google-places";
 import { computePoolExpiresAtIso } from "@/lib/plan-pool-expiry";
+import {
+  clampRadiusMiles,
+  DEFAULT_RADIUS_MILES,
+  radiusMilesToMeters,
+} from "@/lib/search-radius";
 import { coverForVibe, metaClassForVibe } from "@/lib/vibe-assets";
 
 type ClaudePlan = {
@@ -111,6 +116,7 @@ async function enrichPlanWithGooglePlace(
   aiPriceEstimate: string,
   lat?: number,
   lng?: number,
+  radiusMeters?: number,
 ): Promise<Plan> {
   if (!process.env.GOOGLE_PLACES_API_KEY?.trim()) {
     return plan;
@@ -121,7 +127,14 @@ async function enrichPlanWithGooglePlace(
 
   const loc =
     lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)
-      ? { lat, lng, radiusM: 50000 as const }
+      ? {
+          lat,
+          lng,
+          radiusM:
+            radiusMeters != null && Number.isFinite(radiusMeters)
+              ? Math.min(50000, Math.max(1000, Math.round(radiusMeters)))
+              : 50000,
+        }
       : undefined;
 
   let place = await findPlaceByText(
@@ -208,6 +221,7 @@ export async function generateAiPlansForArea(
   area: string,
   lat?: number,
   lng?: number,
+  radiusMiles?: number,
 ): Promise<Plan[]> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key?.trim()) {
@@ -219,10 +233,17 @@ export async function generateAiPlansForArea(
     throw new Error("Missing area");
   }
 
+  const miles =
+    radiusMiles != null && Number.isFinite(radiusMiles)
+      ? clampRadiusMiles(radiusMiles)
+      : DEFAULT_RADIUS_MILES;
+  const radiusMetersForPlaces =
+    lat != null && lng != null ? radiusMilesToMeters(miles) : undefined;
+
   const locHint =
     lat != null && lng != null
-      ? `User coordinates (bias search): ${lat.toFixed(4)}, ${lng.toFixed(4)}. Use them with the place name to judge how dense the destination is—dense urban cores can support more distinct venues; exurban or rural pins should usually mean fewer plans.`
-      : "";
+      ? `User coordinates (bias search): ${lat.toFixed(4)}, ${lng.toFixed(4)}. Prefer venues within roughly ${miles} miles of this point. Use coordinates with the place name to judge density—dense urban cores can support more distinct venues; exurban or rural pins should usually mean fewer plans.`
+      : `Prefer venues within about ${miles} miles of "${trimmedArea}".`;
 
   const prompt = `You are a local outing planner for "${trimmedArea}".
 ${locHint}
@@ -233,7 +254,7 @@ Return ONLY valid JSON (no markdown outside the JSON) with this exact shape:
 STRICT RULES (must follow):
 - Output between 2 and 8 plans. Choose how many based on the area: dense cities and major destinations usually support more distinct real venues for one evening; small towns, very suburban, or sparse areas should have fewer—only as many as you can make strong and non-redundant. Never pad with weak plans or duplicate the same kind of night twice.
 - Across the plans you include, diversify vibes (chill, active, foodie, adv) as much as the count allows—use each vibe at most once when you have enough plans; if you output fewer than four plans, prioritize variety over covering every vibe.
-- Each plan must be anchored to ONE real venue or park that exists in or near "${trimmedArea}" and can be found on Google Maps.
+- Each plan must be anchored to ONE real venue or park that exists within ~${miles} miles of the user's area (or their coordinates when given) and can be found on Google Maps.
 - primaryPlaceName MUST be the official name as listed on Google Maps (e.g. "Ponce City Market", "Piedmont Park", "Krog Street Market", "Mercedes-Benz Stadium"). Not a made-up place name.
 - title and tagline MUST describe that same primaryPlaceName only. Do not title a plan after Neighborhood A while primaryPlaceName is a venue in Neighborhood B.
 - locationDetails: four bullets about what to do at that exact place or its immediate doorstep (same block / connected trail segment). No contradictory scenes (e.g. do not describe a record shop interior if the place is a stadium).
@@ -296,6 +317,7 @@ STRICT RULES (must follow):
         raw.priceEstimate || "~$35/pp",
         lat,
         lng,
+        radiusMetersForPlaces,
       );
     }),
   );

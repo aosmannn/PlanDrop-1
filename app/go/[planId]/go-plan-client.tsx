@@ -21,6 +21,7 @@ import {
   getClaimedPlanId,
   getStoredAiPlan,
   getStoredArea,
+  getStoredRadiusMiles,
   mergeAiPlanIntoStorage,
   releaseClaim,
 } from "@/lib/claim-storage";
@@ -130,45 +131,45 @@ export function GoPlanClient({
   const isYours = claimId === plan.id;
 
   async function confirmRelease() {
-  if (!plan) return;
-  setUnclaimOpen(false);
+    if (!plan) return;
+    setUnclaimOpen(false);
 
-  // Delete from Supabase so all users see it unclaimed
-  await fetch("/api/unclaim-plan", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      planId: plan.id,
-      sessionId: getSessionId(),
-    }),
-  });
+    await fetch("/api/unclaim-plan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        planId: plan.id,
+        sessionId: getSessionId(),
+      }),
+    });
 
-  const r = releaseClaim();
-  const area = areaHint?.trim() || getStoredArea() || "Atlanta, GA";
-  if (r.banned) {
-    setBanModalOpen(true);
-    router.push(buildPlansHref(area));
-    return;
+    const r = releaseClaim();
+    const area = areaHint?.trim() || getStoredArea() || "Atlanta, GA";
+    const rad = getStoredRadiusMiles();
+    if (r.banned) {
+      setBanModalOpen(true);
+      router.push(buildPlansHref(area, rad));
+      return;
+    }
+    const back = buildPlansHref(area, rad);
+    if (r.strikeAfter === 1) {
+      setStrikeInfo({
+        title: "Released",
+        body: "Got it. Releasing too many times in a row can temporarily block new claims — we want real plans, not venue scouting.",
+      });
+      setPostReleaseNav(back);
+      return;
+    }
+    if (r.strikeAfter === 2) {
+      setStrikeInfo({
+        title: "Heads up",
+        body: "Second release this session. One more release and new claims pause for 5 minutes to stop repeat scouting.",
+      });
+      setPostReleaseNav(back);
+      return;
+    }
+    router.push(back);
   }
-  const back = buildPlansHref(area);
-  if (r.strikeAfter === 1) {
-    setStrikeInfo({
-      title: "Released",
-      body: "Got it. Releasing too many times in a row can temporarily block new claims — we want real plans, not venue scouting.",
-    });
-    setPostReleaseNav(back);
-    return;
-  }
-  if (r.strikeAfter === 2) {
-    setStrikeInfo({
-      title: "Heads up",
-      body: "Second release this session. One more release and new claims pause for 5 minutes to stop repeat scouting.",
-    });
-    setPostReleaseNav(back);
-    return;
-  }
-  router.push(back);
-}
 
   return (
     <>
