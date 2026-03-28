@@ -38,6 +38,8 @@ export type Plan = {
   available: boolean;
   viewing?: number;
   locationDetails: string[];
+  /** AI plans: ISO time when this offer leaves the pool if still unclaimed (based on duration, stops, vibe). */
+  poolExpiresAt?: string;
 };
 
 /** Venue-only extras (Wikimedia Commons, CC licenses). Keep each plan’s list scoped to that place. */

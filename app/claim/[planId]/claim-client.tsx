@@ -28,6 +28,7 @@ import {
 import { buildGoHref } from "@/lib/claim-links";
 import { buildGoogleMapsHref } from "@/lib/maps-links";
 import { activityBulletsForDisplay } from "@/lib/plan-display";
+import { isPlanPoolExpired } from "@/lib/plan-pool-expiry";
 import { planToSnapshot, snapshotToPlan } from "@/lib/plan-snapshot";
 import type { Plan } from "@/lib/plans-data";
 import { getPlanById } from "@/lib/plans-data";
@@ -53,6 +54,7 @@ export function ClaimPlanClient({
 
   const globalClaimed = usePlanClaims();
   const isClaimedByAnyone = plan ? globalClaimed.has(plan.id) : false;
+  const poolExpired = plan ? isPlanPoolExpired(plan, poolNow) : false;
 
   useEffect(() => {
     setExistingClaim(getClaimedPlanId());
@@ -62,6 +64,12 @@ export function ClaimPlanClient({
     const tick = () => setClaimBlocked(isClaimBanned());
     tick();
     const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const [poolNow, setPoolNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setPoolNow(Date.now()), 5000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -96,6 +104,12 @@ export function ClaimPlanClient({
 
   async function handleClaim() {
     if (!plan || isClaimedByAnyone || alreadyClaimedOther || alreadyClaimedThis) return;
+    if (isPlanPoolExpired(plan, poolNow)) {
+      window.alert(
+        "This plan timed out and left the pool. Head back to browse for fresh drops.",
+      );
+      return;
+    }
     if (isClaimBanned()) {
       setBanModalOpen(true);
       return;
@@ -258,6 +272,15 @@ export function ClaimPlanClient({
             </div>
           </div>
 
+          {poolExpired && !isClaimedByAnyone ? (
+            <div className="mt-8 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-950">
+              This drop timed out and left the pool.{" "}
+              <Link href={plansBack} className="font-semibold underline">
+                Browse fresh plans
+              </Link>
+            </div>
+          ) : null}
+
           {(isClaimedByAnyone && !alreadyClaimedThis) ? (
             <div className="mt-8 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
               This plan was just claimed by another group.{" "}
@@ -291,21 +314,31 @@ export function ClaimPlanClient({
 
           {!isClaimedByAnyone && !alreadyClaimedOther && !alreadyClaimedThis ? (
             <div className="mt-10 space-y-4">
-              <button
-                type="button"
-                disabled={claiming || claimBlocked}
-                onClick={handleClaim}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-brand px-8 py-4 text-base font-bold text-white shadow-xl shadow-brand/20 transition hover:bg-brand-hover disabled:opacity-70"
-              >
-                {claiming ? (
-                  "Locking…"
-                ) : (
-                  <>
-                    Claim & lock for my group
-                    <span aria-hidden>→</span>
-                  </>
-                )}
-              </button>
+              {poolExpired ? (
+                <Link
+                  href={plansBack}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-brand px-8 py-4 text-base font-bold text-white shadow-xl shadow-brand/20 transition hover:bg-brand-hover"
+                >
+                  Browse fresh plans
+                  <span aria-hidden>→</span>
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  disabled={claiming || claimBlocked}
+                  onClick={handleClaim}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-brand px-8 py-4 text-base font-bold text-white shadow-xl shadow-brand/20 transition hover:bg-brand-hover disabled:opacity-70"
+                >
+                  {claiming ? (
+                    "Locking…"
+                  ) : (
+                    <>
+                      Claim & lock for my group
+                      <span aria-hidden>→</span>
+                    </>
+                  )}
+                </button>
+              )}
               <Link
                 href={plansBack}
                 className="block text-center text-sm font-semibold text-zinc-600 underline decoration-zinc-300 underline-offset-4 hover:text-zinc-900"

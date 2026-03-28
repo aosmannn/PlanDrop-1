@@ -5,6 +5,7 @@ import {
   getPlaceDetails,
   timeFromStop,
 } from "@/lib/google-places";
+import { computePoolExpiresAtIso } from "@/lib/plan-pool-expiry";
 import { coverForVibe, metaClassForVibe } from "@/lib/vibe-assets";
 
 type ClaudePlan = {
@@ -72,6 +73,14 @@ function toPlan(raw: ClaudePlan, index: number): Plan {
           ...Array.from({ length: 4 - details.length }, (_, i) => `Local highlight ${i + 1} at this stop.`),
         ];
 
+  const detailCount = padded.slice(0, 6).filter(Boolean).length;
+  const durationLabel = raw.duration || "2 hrs";
+  const poolExpiresAt = computePoolExpiresAtIso({
+    durationLabel,
+    detailCount,
+    vibe,
+  });
+
   return {
     id: makeId(),
     title: raw.title.slice(0, 120),
@@ -83,7 +92,7 @@ function toPlan(raw: ClaudePlan, index: number): Plan {
     coverImageSrc: cover.src,
     coverImageAlt: `${placeName} — outing`,
     photoCredit: raw.photoCredit.slice(0, 80),
-    duration: raw.duration || "2 hrs",
+    duration: durationLabel,
     groupLabel: min === max ? String(min) : `${min}–${max}`,
     vibe,
     minGroup: min,
@@ -91,6 +100,7 @@ function toPlan(raw: ClaudePlan, index: number): Plan {
     available: true,
     viewing: 3 + Math.floor(Math.random() * 8),
     locationDetails: padded.slice(0, 6),
+    poolExpiresAt,
   };
 }
 

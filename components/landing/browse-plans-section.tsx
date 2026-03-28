@@ -33,6 +33,9 @@ import { PlanMapPreview } from "@/components/plan-map-preview";
 import { activityBulletsForDisplay } from "@/lib/plan-display";
 import { planPhotoCount } from "@/lib/plan-cover";
 import {
+  formatPoolTimeRemaining,
+} from "@/lib/plan-pool-expiry";
+import {
   getStoredAiPlan,
   getStoredArea,
   getStoredPin,
@@ -333,6 +336,12 @@ function PlanCardRightBadges({
   plan: Plan;
   eligible: boolean;
 }) {
+  const [poolNow, setPoolNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setPoolNow(Date.now()), 10_000);
+    return () => window.clearInterval(id);
+  }, []);
+
   const photoCount = planPhotoCount(plan);
   const viewers = useLiveViewingCount(
     plan.id,
@@ -341,16 +350,31 @@ function PlanCardRightBadges({
 
   if (!eligible) return null;
 
+  const poolLeft =
+    eligible && plan.poolExpiresAt
+      ? formatPoolTimeRemaining(plan.poolExpiresAt, poolNow)
+      : null;
+
   const showGallery = photoCount > 1;
   const showViewers = viewers != null;
+  const showPool = poolLeft != null;
 
-  if (!showGallery && !showViewers) return null;
+  if (!showGallery && !showViewers && !showPool) return null;
 
   const pill =
     "inline-flex items-center gap-1 rounded-full bg-black/45 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white ring-1 ring-white/25 backdrop-blur-sm tabular-nums";
 
   return (
     <div className="absolute right-2 top-2 z-[1] flex flex-col items-end gap-1.5">
+      {showPool ? (
+        <span
+          className={pill}
+          title="Time left before this plan leaves the pool if unclaimed"
+        >
+          <HugeIcon icon={Clock03Icon} size={10} aria-hidden />
+          {poolLeft}
+        </span>
+      ) : null}
       {showGallery ? (
         <span className={pill}>
           <HugeIcon icon={Image01Icon} size={10} aria-hidden />
@@ -424,6 +448,12 @@ function BrowsePlansSectionInner() {
   const [aiError, setAiError] = useState<string | null>(null);
   const [banModalOpen, setBanModalOpen] = useState(false);
   const [unclaimOpen, setUnclaimOpen] = useState(false);
+  const [poolNow, setPoolNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = window.setInterval(() => setPoolNow(Date.now()), 10_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   useEffect(() => {
     if (!areaTrim) {
@@ -483,10 +513,15 @@ function BrowsePlansSectionInner() {
       return [];
     }
     if (aiPlans && aiPlans.length > 0) {
-      return aiPlans;
+      return aiPlans.filter((p) => {
+        if (!p.poolExpiresAt) return true;
+        if (new Date(p.poolExpiresAt).getTime() > poolNow) return true;
+        if (globalClaimed.has(p.id)) return true;
+        return false;
+      });
     }
     return [];
-  }, [areaTrim, aiPlans, aiLoading]);
+  }, [areaTrim, aiPlans, aiLoading, poolNow, globalClaimed]);
 
   const filteredPlans = useMemo(
     () => boardPlans.filter((p) => planMatchesFilter(p, active)),
@@ -615,7 +650,9 @@ function BrowsePlansSectionInner() {
                     right now
                   </p>
                   <p className="mt-1 text-xs text-zinc-500">
-                    Open spots update in real time as people claim.
+                    Open spots update in real time as people claim. Each unclaimed
+                    plan leaves the pool after a limited window—longer outings and
+                    richer stops get a bit more time.
                   </p>
                 </div>
               </div>
