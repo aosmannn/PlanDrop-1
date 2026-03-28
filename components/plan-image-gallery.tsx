@@ -10,7 +10,8 @@ import type { Plan } from "@/lib/plans-data";
 type Variant = "card" | "hero" | "modal";
 
 const wrapClass: Record<Variant, string> = {
-  card: "relative aspect-[5/3] w-full overflow-hidden rounded-t-2xl bg-zinc-100",
+  card:
+    "relative isolate z-0 aspect-[5/3] w-full overflow-hidden rounded-t-2xl bg-zinc-100",
   hero: "relative aspect-[21/9] w-full bg-zinc-100 sm:aspect-[2.5/1]",
   modal:
     "relative h-full min-h-0 w-full overflow-hidden bg-zinc-100",
@@ -38,16 +39,44 @@ export function PlanImageGallery({
   priority?: boolean;
 }) {
   const images = useMemo(() => planGalleryImageUrls(plan), [plan]);
+  const imgSig = useMemo(
+    () => images.map((i) => i.src).join("|"),
+    [images],
+  );
   const [active, setActive] = useState(0);
+  const [failedSrcs, setFailedSrcs] = useState<Set<string>>(() => new Set());
   const n = images.length;
 
   useEffect(() => {
     setActive(0);
-  }, [plan.id, n]);
+    setFailedSrcs(new Set());
+  }, [plan.id, imgSig]);
+
+  if (n === 0) {
+    return (
+      <div className={wrapClass[variant]}>
+        <div className="flex h-full min-h-[8rem] w-full flex-col items-center justify-center gap-1 px-4 text-center">
+          <p
+            className={
+              variant === "card"
+                ? "text-xs font-medium text-zinc-500"
+                : "text-sm font-medium text-zinc-500"
+            }
+          >
+            No image found
+          </p>
+          <p className="text-[10px] leading-snug text-zinc-400">
+            No photo for this place yet.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const current = images[Math.min(active, Math.max(0, n - 1))] ?? images[0];
   if (!current) return null;
 
+  const currentFailed = failedSrcs.has(current.src);
   const showNav = n > 1;
   const sizes =
     variant === "card"
@@ -56,17 +85,37 @@ export function PlanImageGallery({
         ? "(max-width: 640px) 100vw, 460px"
         : "(max-width: 768px) 100vw, 672px";
 
+  const isProxyPhoto = current.src.includes("/api/place-photo");
+
+  const placeholderCopy =
+    variant === "card"
+      ? "text-xs font-medium text-zinc-500"
+      : "text-sm font-medium text-zinc-500";
+
   return (
     <div className={wrapClass[variant]}>
-      <Image
-        key={current.src}
-        src={current.src}
-        alt={current.alt}
-        fill
-        className={`object-cover ${variant === "card" ? "transition-transform duration-500 group-hover:scale-[1.02]" : ""}`}
-        sizes={sizes}
-        priority={priority ?? active === 0}
-      />
+      {currentFailed ? (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-zinc-100 px-4 text-center">
+          <p className={placeholderCopy}>No image found</p>
+          <p className="text-[10px] leading-snug text-zinc-400">
+            This photo could not be loaded.
+          </p>
+        </div>
+      ) : (
+        <Image
+          key={`${plan.id}:${current.src}`}
+          src={current.src}
+          alt={current.alt}
+          fill
+          className={`object-cover ${variant === "card" ? "transition-transform duration-500 group-hover:scale-[1.02]" : ""}`}
+          sizes={sizes}
+          priority={priority ?? active === 0}
+          unoptimized={isProxyPhoto}
+          onError={() =>
+            setFailedSrcs((prev) => new Set(prev).add(current.src))
+          }
+        />
+      )}
       {showNav ? (
         <>
           {variant === "modal" ? (

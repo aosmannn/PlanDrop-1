@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { BrowsePlansSection } from "@/components/landing/browse-plans-section";
 import { HeroHeadline } from "@/components/landing/hero-headline";
+import { HeroPlanCardsMarquee } from "@/components/landing/hero-plan-cards-marquee";
 import { HeroLocationSearch } from "@/components/landing/hero-location-search";
 import { getHomepageStats } from "@/lib/homepage-stats";
 import { HowItWorksSection } from "@/components/landing/how-it-works-section";
@@ -19,9 +20,9 @@ export default function Home() {
         {/* Hero */}
         <section
           id="hero-locate"
-          className="px-4 pb-16 pt-12 sm:px-6 sm:pb-24 sm:pt-16 lg:px-8"
+          className="overflow-x-hidden pb-16 pt-12 sm:pb-24 sm:pt-16"
         >
-          <div className="mx-auto max-w-4xl text-center">
+          <div className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
             <p className="inline-flex items-center gap-2 rounded-full bg-brand-soft px-4 py-2 text-xs font-bold uppercase tracking-wide text-brand">
               <span className="h-2 w-2 rounded-full bg-brand animate-pulse" aria-hidden />
               Live plans available now
@@ -32,8 +33,14 @@ export default function Home() {
               one tap. No spreadsheet. No group-chat meltdown.
             </p>
             <HeroLocationSearch />
+          </div>
 
-            <div className="mx-auto mt-14 grid max-w-3xl grid-cols-1 gap-5 rounded-2xl border border-zinc-200/70 bg-zinc-50/90 p-6 shadow-sm ring-1 ring-zinc-100/80 sm:mt-16 sm:grid-cols-3 sm:gap-6 sm:p-8">
+          <div className="mt-10 sm:mt-12">
+            <HeroPlanCardsMarquee />
+          </div>
+
+          <div className="mx-auto mt-14 max-w-3xl px-4 sm:mt-16 sm:px-6 lg:px-8">
+            <div className="grid grid-cols-1 gap-5 rounded-2xl border border-zinc-200/70 bg-zinc-50/90 p-6 shadow-sm ring-1 ring-zinc-100/80 sm:grid-cols-3 sm:gap-6 sm:p-8">
               {[
                 [String(stats.plansLiveToday), "Plans live today"],
                 [String(stats.citiesDropping), "Cities dropping"],

@@ -76,7 +76,7 @@ function toPlan(raw: ClaudePlan, index: number): Plan {
     id: makeId(),
     title: raw.title.slice(0, 120),
     tagline: raw.tagline.slice(0, 200),
-    price: raw.priceEstimate || "~$40/pp",
+    price: raw.priceEstimate || "~$35/pp",
     meta,
     metaClass: metaClassForVibe(vibe),
     stop,
@@ -114,9 +114,13 @@ async function enrichPlanWithGooglePlace(
       ? { lat, lng, radiusM: 50000 as const }
       : undefined;
 
-  let place = await findPlaceByText(`${placeQuery} ${area}`, loc);
+  let place = await findPlaceByText(
+    `${placeQuery} ${area}`,
+    loc,
+    placeQuery,
+  );
   if (!place?.photoRef) {
-    place = await findPlaceByText(placeQuery, loc);
+    place = await findPlaceByText(placeQuery, loc, placeQuery);
   }
 
   if (!place) {
@@ -214,7 +218,7 @@ export async function generateAiPlansForArea(
 ${locHint}
 
 Return ONLY valid JSON (no markdown outside the JSON) with this exact shape:
-{"plans":[{"title":"string","tagline":"string","priceEstimate":"string like ~$35/pp","vibe":"chill|active|foodie|adv","minGroup":number,"maxGroup":number,"duration":"string like 2.5 hrs","meetTime":"string like 6:30 PM","primaryPlaceName":"string","locationDetails":["string","string","string","string"],"photoCredit":"short label"}]}
+{"plans":[{"title":"string","tagline":"string","priceEstimate":"string: use \"Free\" for no paid admission (parks, plazas, exterior walks); otherwise a realistic per-person estimate like ~$28/pp or ~$35–50/pp for food halls","vibe":"chill|active|foodie|adv","minGroup":number,"maxGroup":number,"duration":"string like 2.5 hrs","meetTime":"string like 6:30 PM","primaryPlaceName":"string","locationDetails":["string","string","string","string"],"photoCredit":"short label"}]}
 
 STRICT RULES (must follow):
 - Output between 2 and 8 plans. Choose how many based on the area: dense cities and major destinations usually support more distinct real venues for one evening; small towns, very suburban, or sparse areas should have fewer—only as many as you can make strong and non-redundant. Never pad with weak plans or duplicate the same kind of night twice.
@@ -224,7 +228,7 @@ STRICT RULES (must follow):
 - title and tagline MUST describe that same primaryPlaceName only. Do not title a plan after Neighborhood A while primaryPlaceName is a venue in Neighborhood B.
 - locationDetails: four bullets about what to do at that exact place or its immediate doorstep (same block / connected trail segment). No contradictory scenes (e.g. do not describe a record shop interior if the place is a stadium).
 - meetTime: a single meet time or window (e.g. "6:30 PM" or "10:00 AM").
-- priceEstimate: a rough per-person spend guess for that kind of outing (still refined later with Maps price level when available).
+- priceEstimate: Use the exact word Free when the outing needs no ticket or paid admission. For dining or paid venues, give an approximate per-person range typical for that area (e.g. ~$40/pp or ~$30–45/pp). Maps price level may refine this server-side.
 - Do not repeat the same primaryPlaceName in two plans.`;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -279,7 +283,7 @@ STRICT RULES (must follow):
         base,
         raw.primaryPlaceName || "",
         trimmedArea,
-        raw.priceEstimate || "~$40/pp",
+        raw.priceEstimate || "~$35/pp",
         lat,
         lng,
       );

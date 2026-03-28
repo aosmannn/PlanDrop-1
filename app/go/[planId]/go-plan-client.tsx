@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ClaimBanModal } from "@/components/claim-ban-modal";
+import { MessageModal } from "@/components/message-modal";
+import { UnclaimConfirmModal } from "@/components/unclaim-confirm-modal";
 import {
   canShowPlanMapPreview,
   PlanMapPreview,
@@ -45,6 +47,12 @@ export function GoPlanClient({
   const [copied, setCopied] = useState(false);
   const [claimId, setClaimId] = useState<string | null>(null);
   const [banModalOpen, setBanModalOpen] = useState(false);
+  const [unclaimOpen, setUnclaimOpen] = useState(false);
+  const [strikeInfo, setStrikeInfo] = useState<{
+    title: string;
+    body: string;
+  } | null>(null);
+  const [postReleaseNav, setPostReleaseNav] = useState<string | null>(null);
 
   useEffect(() => {
     if (staticPlan) {
@@ -121,11 +129,9 @@ export function GoPlanClient({
 
   const isYours = claimId === plan.id;
 
-  function handleRelease() {
-    const ok = window.confirm(
-      "Release this plan? The spot opens for someone else. Don't claim and release repeatedly just to scout venues — it hurts the drop for everyone.",
-    );
-    if (!ok) return;
+  function confirmRelease() {
+    if (!plan) return;
+    setUnclaimOpen(false);
     const r = releaseClaim();
     const area = areaHint?.trim() || getStoredArea() || "Atlanta, GA";
     if (r.banned) {
@@ -133,21 +139,47 @@ export function GoPlanClient({
       router.push(buildPlansHref(area));
       return;
     }
+    const back = buildPlansHref(area);
     if (r.strikeAfter === 1) {
-      window.alert(
-        "Got it. Releasing too many times in a row can temporarily block new claims — we want real plans, not venue scouting.",
-      );
-    } else if (r.strikeAfter === 2) {
-      window.alert(
-        "Second release this session. One more release and new claims pause for 5 minutes to stop repeat scouting.",
-      );
+      setStrikeInfo({
+        title: "Released",
+        body: "Got it. Releasing too many times in a row can temporarily block new claims — we want real plans, not venue scouting.",
+      });
+      setPostReleaseNav(back);
+      return;
     }
-    router.push(buildPlansHref(area));
+    if (r.strikeAfter === 2) {
+      setStrikeInfo({
+        title: "Heads up",
+        body: "Second release this session. One more release and new claims pause for 5 minutes to stop repeat scouting.",
+      });
+      setPostReleaseNav(back);
+      return;
+    }
+    router.push(back);
   }
 
   return (
     <>
       <ClaimBanModal open={banModalOpen} onClose={() => setBanModalOpen(false)} />
+      <MessageModal
+        open={strikeInfo != null}
+        title={strikeInfo?.title ?? ""}
+        onClose={() => {
+          setStrikeInfo(null);
+          if (postReleaseNav) {
+            router.push(postReleaseNav);
+            setPostReleaseNav(null);
+          }
+        }}
+      >
+        {strikeInfo?.body ?? ""}
+      </MessageModal>
+      <UnclaimConfirmModal
+        open={unclaimOpen}
+        onClose={() => setUnclaimOpen(false)}
+        onConfirm={confirmRelease}
+      />
       <SiteHeader />
       <SetupFlowStepper currentStep={4} planId={plan.id} areaHint={areaHint} />
       <main className="px-4 pb-16 pt-8 sm:px-6 sm:pb-24 sm:pt-12 lg:px-8">
@@ -161,18 +193,8 @@ export function GoPlanClient({
             </span>
             Just show up
           </h1>
-          <p className="mt-4 text-base leading-relaxed text-zinc-600">
-            Share a link with your crew. They see venues, timing, and what to
-            expect. Then just go.
-          </p>
 
-          {isYours ? (
-            <p className="mt-4 rounded-xl border border-brand/20 bg-brand-soft px-4 py-3 text-sm font-medium text-zinc-900">
-              This plan is locked to your group for this session — your crew can
-              view the briefing below. Copy the link below so friends see the full
-              plan (including AI details).
-            </p>
-          ) : (
+          {!isYours ? (
             <p className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
               Preview mode: anyone with this link can see the briefing.{" "}
               <Link
@@ -187,7 +209,7 @@ export function GoPlanClient({
               </Link>{" "}
               to lock it for your group in the demo.
             </p>
-          )}
+          ) : null}
 
           <div className="mt-8 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
             <PlanImageGallery plan={plan} variant="hero" priority />
@@ -266,7 +288,7 @@ export function GoPlanClient({
               </p>
               <button
                 type="button"
-                onClick={handleRelease}
+                onClick={() => setUnclaimOpen(true)}
                 className="mt-4 w-full rounded-xl border border-zinc-300 bg-white py-3 text-sm font-bold text-zinc-800 transition hover:bg-zinc-50 sm:w-auto sm:px-6"
               >
                 Release this plan

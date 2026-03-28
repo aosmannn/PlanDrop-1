@@ -26,6 +26,61 @@ export type PlaceDetailsEnrichment = {
   photoReferences?: string[];
 };
 
+const PLACE_NAME_STOPWORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "at",
+  "for",
+  "in",
+  "of",
+  "on",
+  "the",
+  "to",
+  "&",
+]);
+
+function normalizePlaceName(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function placeNameTokens(s: string): Set<string> {
+  const out = new Set<string>();
+  for (const w of normalizePlaceName(s).split(" ")) {
+    if (w.length > 1 && !PLACE_NAME_STOPWORDS.has(w)) out.add(w);
+  }
+  return out;
+}
+
+/**
+ * True when a Text Search result name plausibly matches the planner’s venue name.
+ * Avoids using the first hit when it’s an unrelated place (same photos on every card).
+ */
+export function placeNamesLikelySame(
+  googleName: string,
+  expectedName: string,
+): boolean {
+  const g = normalizePlaceName(googleName);
+  const e = normalizePlaceName(expectedName);
+  if (!g || !e) return false;
+  if (g.includes(e) || e.includes(g)) return true;
+  const gt = placeNameTokens(googleName);
+  const et = placeNameTokens(expectedName);
+  if (et.size === 0 || gt.size === 0) return false;
+  let overlap = 0;
+  et.forEach((t) => {
+    if (gt.has(t)) overlap += 1;
+  });
+  const need = Math.max(1, Math.ceil(Math.min(et.size, gt.size) * 0.45));
+  return overlap >= need;
+}
+
 /** Monday-first index (Google weekday_text order for en-US). */
 function mondayFirstIndexFromJsDay(jsDay: number): number {
   return jsDay === 0 ? 6 : jsDay - 1;
@@ -119,19 +174,76 @@ export async function getPlaceDetails(
   };
 }
 
-/** Single-line price like the catalog cards (~$42/pp). Maps tier is used server-side for search only. */
+/**
+ * One-line price for cards. Uses Google Places `price_level` when present (0 = free;
+ * 1–4 ≈ inexpensive → very expensive). Respects AI when it marks a true free outing.
+ */
 export function formatPriceFromMaps(
-  _level: number | undefined,
+  level: number | undefined,
   aiFallback?: string,
 ): string {
-  void _level;
-  const t = aiFallback?.trim();
-  return t && t.length > 0 ? t : "~$35/pp";
+  const ai = aiFallback?.trim();
+  if (ai && /^free\b/i.test(ai)) {
+    return "Free";
+  }
+  // Places price_level 0 means “free” for some POIs but is often “unknown” for stadiums
+  // and landmarks — don’t show “Free” unless the model explicitly said so above.
+  if (level === 0) {
+    if (ai && /[$~]|\d/.test(ai)) {
+      return ai;
+    }
+    return "~$35/pp";
+  }
+  if (level === 1) {
+    return "~$18/pp";
+  }
+  if (level === 2) {
+    return "~$35/pp";
+  }
+  if (level === 3) {
+    return "~$55/pp";
+  }
+  if (level === 4) {
+    return "~$90+/pp";
+  }
+  if (ai && ai.length > 0) {
+    return ai;
+  }
+  return "~$35/pp";
+}
+
+function enrichedPlaceFromSearchResult(r: {
+  place_id: string;
+  name: string;
+  formatted_address: string;
+  rating?: number;
+  user_ratings_total?: number;
+  price_level?: number;
+  photos?: { photo_reference: string }[];
+}): EnrichedPlace {
+  const photoRefs = (r.photos ?? [])
+    .map((p) => p.photo_reference)
+    .filter((x): x is string => Boolean(x))
+    .filter((x, i, a) => a.indexOf(x) === i)
+    .slice(0, 10);
+
+  return {
+    name: r.name,
+    formattedAddress: r.formatted_address,
+    placeId: r.place_id,
+    rating: r.rating,
+    userRatingsTotal: r.user_ratings_total,
+    priceLevel: r.price_level,
+    photoRef: photoRefs[0],
+    photoRefs: photoRefs.length > 0 ? photoRefs : undefined,
+  };
 }
 
 export async function findPlaceByText(
   query: string,
   opts?: { lat?: number; lng?: number; radiusM?: number },
+  /** When set, only accept a result whose name matches this venue (scan top results). */
+  expectedPrimaryName?: string,
 ): Promise<EnrichedPlace | null> {
   const key = process.env.GOOGLE_PLACES_API_KEY;
   if (!key?.trim()) return null;
@@ -168,25 +280,20 @@ export async function findPlaceByText(
     return null;
   }
 
-  const r = data.results?.[0];
-  if (!r) return null;
+  const list = data.results ?? [];
+  if (list.length === 0) return null;
 
-  const photoRefs = (r.photos ?? [])
-    .map((p) => p.photo_reference)
-    .filter((x): x is string => Boolean(x))
-    .filter((x, i, a) => a.indexOf(x) === i)
-    .slice(0, 10);
+  const expected = expectedPrimaryName?.trim();
+  if (expected) {
+    for (const r of list.slice(0, 15)) {
+      if (placeNamesLikelySame(r.name, expected)) {
+        return enrichedPlaceFromSearchResult(r);
+      }
+    }
+    return null;
+  }
 
-  return {
-    name: r.name,
-    formattedAddress: r.formatted_address,
-    placeId: r.place_id,
-    rating: r.rating,
-    userRatingsTotal: r.user_ratings_total,
-    priceLevel: r.price_level,
-    photoRef: photoRefs[0],
-    photoRefs: photoRefs.length > 0 ? photoRefs : undefined,
-  };
+  return enrichedPlaceFromSearchResult(list[0]!);
 }
 
 /** Take text after last em dash as the time / window phrase. */

@@ -4,7 +4,7 @@ export const runtime = "nodejs";
 
 /**
  * Proxies Google Place Photos so the browser never sees the API key.
- * GET /api/place-photo?ref=<photo_reference>
+ * GET /api/place-photo?ref=<photo_reference>&pid=<plan_id> (pid is cache-only; ignored upstream)
  */
 export async function GET(req: Request) {
   const ref = new URL(req.url).searchParams.get("ref");

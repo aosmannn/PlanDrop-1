@@ -1,12 +1,24 @@
 import type { Plan } from "@/lib/plans-data";
 
+function planHasGooglePlacePhotos(plan: Plan): boolean {
+  const refs = plan.placePhotoRefs?.filter((r) => r?.trim()) ?? [];
+  if (refs.length > 0) return true;
+  return Boolean(plan.placePhotoRef?.trim());
+}
+
+/** Disambiguates Next/Image and CDN caches so each card stays tied to its plan. */
+function placePhotoSrc(planId: string, ref: string): string {
+  const r = ref.trim();
+  return `/api/place-photo?ref=${encodeURIComponent(r)}&pid=${encodeURIComponent(planId)}`;
+}
+
 /** Resolved image URL for plan cards (local asset or Places photo proxy). */
 export function planCoverImageUrl(plan: Plan): string {
   const ref =
     plan.placePhotoRefs?.find((r) => r?.trim())?.trim() ??
     plan.placePhotoRef?.trim();
   if (ref) {
-    return `/api/place-photo?ref=${encodeURIComponent(ref)}`;
+    return placePhotoSrc(plan.id, ref);
   }
   return plan.coverImageSrc;
 }
@@ -16,14 +28,14 @@ export function planGalleryImageUrls(plan: Plan): { src: string; alt: string }[]
   const refs = plan.placePhotoRefs?.filter((r) => r?.trim()) ?? [];
   if (refs.length > 0) {
     return refs.map((ref, i) => ({
-      src: `/api/place-photo?ref=${encodeURIComponent(ref.trim())}`,
+      src: placePhotoSrc(plan.id, ref),
       alt: i === 0 ? plan.coverImageAlt : `${plan.coverImageAlt} (${i + 1})`,
     }));
   }
   if (plan.placePhotoRef?.trim()) {
     return [
       {
-        src: `/api/place-photo?ref=${encodeURIComponent(plan.placePhotoRef.trim())}`,
+        src: placePhotoSrc(plan.id, plan.placePhotoRef),
         alt: plan.coverImageAlt,
       },
     ];
@@ -35,6 +47,9 @@ export function planGalleryImageUrls(plan: Plan): { src: string; alt: string }[]
       alt: i === 0 ? plan.coverImageAlt : `${plan.coverImageAlt} (${i + 1})`,
     }));
   }
+  if (plan.id.startsWith("ai-") && !planHasGooglePlacePhotos(plan)) {
+    return [];
+  }
   return [{ src: plan.coverImageSrc, alt: plan.coverImageAlt }];
 }
 
@@ -43,5 +58,6 @@ export function planPhotoCount(plan: Plan): number {
   if (plan.placePhotoRefs?.length) return plan.placePhotoRefs.length;
   if (plan.placePhotoRef?.trim()) return 1;
   if (plan.galleryImageSrcs?.length) return plan.galleryImageSrcs.length;
+  if (plan.id.startsWith("ai-") && !planHasGooglePlacePhotos(plan)) return 0;
   return 1;
 }

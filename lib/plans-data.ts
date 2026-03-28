@@ -57,18 +57,12 @@ const KROG_GALLERY_EXTRAS = [
   "https://upload.wikimedia.org/wikipedia/commons/a/a7/Krog_Street_Market.jpg",
 ] as const;
 
-const STADIUM_GALLERY_EXTRAS = [
-  "https://upload.wikimedia.org/wikipedia/commons/2/29/Mercedes-Benz_Stadium%2C_July_2018.jpg",
-  "https://upload.wikimedia.org/wikipedia/commons/1/14/Mercedes-Benz_Stadium_Pedestrian_Bridge.jpg",
-  "https://upload.wikimedia.org/wikipedia/commons/6/6c/Mercedes-Benz_Stadium%2C_Atlanta%2C_GA_%2846558862285%29.jpg",
-] as const;
-
 export const PLANS: Plan[] = [
   {
     id: "1",
     title: "Ponce & BeltLine golden hour",
     tagline: "Stroll the Eastside Trail, then settle in at the market.",
-    price: "~$42/pp",
+    price: "~$32–48/pp",
     meta: "CHILL · 4–6 PEOPLE · 2.5 HRS",
     metaClass: "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100",
     stop: "Ponce City Market (6:30 PM)",
@@ -102,7 +96,7 @@ export const PLANS: Plan[] = [
     id: "2",
     title: "Piedmont Park morning loop",
     tagline: "Lake loop, skyline views, cold coffee after.",
-    price: "~$18/pp",
+    price: "Free",
     meta: "ACTIVE · 2–4 PEOPLE · 2 HRS",
     metaClass: "bg-brand-soft text-brand ring-1 ring-brand/20",
     stop: "Piedmont Park — 12th St & Piedmont Ave (8:00 AM)",
@@ -136,7 +130,7 @@ export const PLANS: Plan[] = [
     id: "3",
     title: "Krog Street tasting line",
     tagline: "Small plates, shared tables, zero decision fatigue.",
-    price: "~$55/pp",
+    price: "~$45–65/pp",
     meta: "FOODIE · 4 PEOPLE · 3 HRS",
     metaClass: "bg-amber-50 text-amber-800 ring-1 ring-amber-100",
     stop: "Krog Street Market (7:15 PM)",
@@ -163,41 +157,10 @@ export const PLANS: Plan[] = [
       "Easy parking and BeltLine access for late arrivals.",
     ],
   },
-  {
-    id: "4",
-    title: "Mercedes-Benz Stadium circuit",
-    tagline: "The pinwheel roof, the plaza, then easy hops to Westside food.",
-    price: "~$45/pp",
-    meta: "ADVENTUROUS · 2–4 PEOPLE · 3 HRS",
-    metaClass: "bg-violet-50 text-violet-800 ring-1 ring-violet-100",
-    stop: "Mercedes-Benz Stadium — Northside Dr NW (4:30 PM)",
-    coverImageSrc: "/images/mercedes-benz-stadium.png",
-    coverImageAlt:
-      "Aerial view of Mercedes-Benz Stadium with closed retractable roof and Mercedes star on the facade",
-    photoCredit: "Mercedes-Benz Stadium - Atlanta",
-    galleryImageSrcs: [
-      "/images/mercedes-benz-stadium.png",
-      ...STADIUM_GALLERY_EXTRAS,
-    ],
-    placeLat: 33.7554,
-    placeLng: -84.4008,
-    formattedAddress: "1 AMB Dr NW, Atlanta, GA 30313, USA",
-    duration: "3 hrs",
-    groupLabel: "2–4",
-    vibe: "adv",
-    minGroup: 2,
-    maxGroup: 4,
-    available: true,
-    viewing: 6,
-    locationDetails: [
-      "Walk the plaza and take in the pinwheel roof and Mercedes star facade.",
-      "On event days, soak up pregame energy; off-days, quiet architecture photos.",
-      "Visit the team store for gear if your group wants a shared souvenir stop.",
-      "Loop the stadium footprint, then cut toward Westside or GWCC-adjacent dining.",
-      "Pair with a short rideshare hop if you want Atlantic Station or Vine City after.",
-    ],
-  },
 ];
+
+/** Curated “tonight” board for the homepage — real spots, fixed copy (no AI on first paint). */
+export const TONIGHT_CATALOG_PLANS = PLANS;
 
 export function getPlanById(id: string): Plan | undefined {
   return PLANS.find((p) => p.id === id);

@@ -4,7 +4,6 @@ import {
   PartyIcon,
   ZapIcon,
 } from "@hugeicons/core-free-icons";
-import Link from "next/link";
 import { HugeIcon } from "@/components/ui/huge-icon";
 
 const steps = [
@@ -12,25 +11,21 @@ const steps = [
     icon: Location01Icon,
     title: "Drop a pin",
     body: "Enter your city or neighborhood. We surface plans designed for your exact area.",
-    href: "/drop",
   },
   {
     icon: GridViewIcon,
     title: "Browse the drop",
     body: "See the live grid of available plans — each with a vibe, duration, group size, and stops.",
-    href: "/plans",
   },
   {
     icon: ZapIcon,
     title: "Lock it in",
     body: "Review the plan and tap Claim—your group gets a live hold, so no one double-books the same slot.",
-    href: "/plans#plans",
   },
   {
     icon: PartyIcon,
     title: "Just show up",
     body: "Share a link with your crew. They see venues, timing, and what to expect. Then just go.",
-    href: "/go/1",
   },
 ] as const;
 
@@ -55,10 +50,9 @@ export function HowItWorksSection() {
 
       <div className="mx-auto mt-16 grid max-w-7xl gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {steps.map((s, i) => (
-          <Link
+          <div
             key={s.title}
-            href={s.href}
-            className="group relative block overflow-hidden rounded-3xl bg-white p-8 text-left shadow-sm ring-1 ring-zinc-100 transition-all hover:-translate-y-1 hover:shadow-xl hover:shadow-brand/5 hover:ring-brand/20"
+            className="group relative overflow-hidden rounded-3xl bg-white p-8 text-left shadow-sm ring-1 ring-zinc-100 transition-all hover:-translate-y-1 hover:shadow-xl hover:shadow-brand/5 hover:ring-brand/20"
           >
             <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-brand-soft opacity-0 transition-opacity group-hover:opacity-100" />
             <div className="relative">
@@ -77,7 +71,7 @@ export function HowItWorksSection() {
                 </p>
               </div>
             </div>
-          </Link>
+          </div>
         ))}
       </div>
     </section>
