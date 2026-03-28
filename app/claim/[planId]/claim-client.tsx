@@ -1,5 +1,7 @@
 "use client";
 
+import { getSessionId } from "@/lib/session-id";
+import { usePlanClaims } from "@/hooks/usePlanClaims";
 import { CheckmarkCircle02Icon, MapsIcon, ZapIcon } from "@hugeicons/core-free-icons";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -49,6 +51,9 @@ export function ClaimPlanClient({
   const [banModalOpen, setBanModalOpen] = useState(false);
   const [claimBlocked, setClaimBlocked] = useState(false);
 
+  const globalClaimed = usePlanClaims();
+  const isClaimedByAnyone = plan ? globalClaimed.has(plan.id) : false;
+
   useEffect(() => {
     setExistingClaim(getClaimedPlanId());
   }, []);
@@ -89,22 +94,37 @@ export function ClaimPlanClient({
   const alreadyClaimedOther =
     existingClaim != null && existingClaim !== planId;
 
-  function handleClaim() {
-    if (!plan?.available || alreadyClaimedOther || alreadyClaimedThis) return;
+  async function handleClaim() {
+    if (!plan || isClaimedByAnyone || alreadyClaimedOther || alreadyClaimedThis) return;
     if (isClaimBanned()) {
       setBanModalOpen(true);
       return;
     }
     setClaiming(true);
-    window.setTimeout(() => {
-      setClaimedPlanId(plan.id);
+
+    const res = await fetch("/api/claim-plan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ planId: plan.id, sessionId: getSessionId() }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({})) as { error?: string };
       setClaiming(false);
-      const q = new URLSearchParams();
-      if (area.trim()) q.set("area", area.trim());
-      if (plan.id.startsWith("ai-")) q.set("snapshot", planToSnapshot(plan));
-      const qs = q.toString();
-      router.push(qs ? `/go/${plan.id}?${qs}` : `/go/${plan.id}`);
-    }, 650);
+      if (data.error === "already_claimed") {
+        alert("Someone just claimed this plan! Pick another one.");
+      }
+      return;
+    }
+
+    setClaimedPlanId(plan.id);
+    setClaiming(false);
+
+    const q = new URLSearchParams();
+    if (area.trim()) q.set("area", area.trim());
+    if (plan.id.startsWith("ai-")) q.set("snapshot", planToSnapshot(plan));
+    const qs = q.toString();
+    router.push(qs ? `/go/${plan.id}?${qs}` : `/go/${plan.id}`);
   }
 
   if (!resolved) {
@@ -238,9 +258,9 @@ export function ClaimPlanClient({
             </div>
           </div>
 
-          {!plan.available ? (
+          {(isClaimedByAnyone && !alreadyClaimedThis) ? (
             <div className="mt-8 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-              This plan is already claimed in the live pool.{" "}
+              This plan was just claimed by another group.{" "}
               <Link href={plansBack} className="font-semibold underline">
                 Browse other plans
               </Link>
@@ -252,7 +272,7 @@ export function ClaimPlanClient({
               You already have a plan locked for this session.{" "}
               <Link
                 href={(() => {
-                  const p = getPlanById(existingClaim) ?? getStoredAiPlan(existingClaim);
+                  const p = getPlanById(existingClaim!) ?? getStoredAiPlan(existingClaim!);
                   return p
                     ? buildGoHref(p, area)
                     : `/go/${existingClaim}`;
@@ -269,7 +289,7 @@ export function ClaimPlanClient({
             </div>
           ) : null}
 
-          {plan.available && !alreadyClaimedOther && !alreadyClaimedThis ? (
+          {!isClaimedByAnyone && !alreadyClaimedOther && !alreadyClaimedThis ? (
             <div className="mt-10 space-y-4">
               <button
                 type="button"
