@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Syne } from "next/font/google";
+import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 
 const inter = Inter({
@@ -8,10 +8,11 @@ const inter = Inter({
   display: "swap",
 });
 
-const syne = Syne({
+const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
-  variable: "--font-syne",
+  variable: "--font-display",
   display: "swap",
+  weight: ["500", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -26,8 +27,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${syne.variable}`}>
-      <body className="min-h-screen bg-white font-sans text-zinc-900 antialiased">
+    <html lang="en" className={`${inter.variable} ${plusJakarta.variable}`}>
+      <body className="min-h-screen bg-white font-sans text-base text-zinc-900 antialiased [font-feature-settings:'kern'_1,'liga'_1]">
         {children}
       </body>
     </html>

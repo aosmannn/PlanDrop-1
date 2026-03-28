@@ -9,19 +9,24 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          DEFAULT: "#FF385C",
-          hover: "#E31C5F",
-          soft: "#FFEBEE",
+          DEFAULT: "#4F46E5",
+          hover: "#4338CA",
+          soft: "#EEF2FF",
         },
         navy: {
-          DEFAULT: "#1A1C2E",
-          deep: "#0F1020",
-          card: "#1E1B4B",
+          DEFAULT: "#0F172A",
+          deep: "#020617",
+          card: "#1E293B",
         },
       },
       fontFamily: {
         sans: ["var(--font-inter)", "system-ui", "sans-serif"],
-        display: ["var(--font-syne)", "var(--font-inter)", "system-ui", "sans-serif"],
+        display: [
+          "var(--font-display)",
+          "var(--font-inter)",
+          "system-ui",
+          "sans-serif",
+        ],
       },
       boxShadow: {
         search:
