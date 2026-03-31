@@ -2,6 +2,7 @@
 
 import { getPlanById, type Plan } from "@/lib/plans-data";
 import { planToSnapshot } from "@/lib/plan-snapshot";
+import { normalizeOccasionId, type PlanOccasionId } from "@/lib/plan-occasion";
 import {
   clampRadiusMiles,
   DEFAULT_RADIUS_MILES,
@@ -9,12 +10,13 @@ import {
 
 export const AREA_KEY = "plandrop_area";
 export const CLAIM_KEY = "plandrop_claim_plan_id";
-/** `{ planId, claimedAtMs }` — cleared when the session claim is released. */
+/** `{ planId, claimedAtMs, claimKey? }` — cleared when the session claim is released. */
 export const CLAIM_META_KEY = "plandrop_claim_meta";
 export const PIN_KEY = "plandrop_pin";
 /** Set when user searches by ZIP/city/location so /drop can skip to browse. */
 export const SKIP_DROP_KEY = "plandrop_skip_drop";
 export const RADIUS_MILES_KEY = "plandrop_radius_miles";
+export const OCCASION_KEY = "plandrop_plan_occasion";
 export const AI_PLANS_MAP_KEY = "plandrop_ai_plans_map";
 const PAST_CLAIMS_KEY = "plandrop_past_claims";
 const MAX_PAST_CLAIMS = 40;
@@ -93,18 +95,29 @@ function notifyClaimChanged(): void {
   }
 }
 
-export function setClaimedPlanId(planId: string): void {
+export function setClaimedPlanId(planId: string, claimKey?: string | null): void {
   if (typeof window === "undefined") return;
   try {
     sessionStorage.setItem(CLAIM_KEY, planId);
     sessionStorage.setItem(
       CLAIM_META_KEY,
-      JSON.stringify({ planId, claimedAtMs: Date.now() }),
+      JSON.stringify({
+        planId,
+        claimedAtMs: Date.now(),
+        ...(claimKey?.trim() ? { claimKey: claimKey.trim() } : {}),
+      }),
     );
     notifyClaimChanged();
   } catch {
     /* ignore */
   }
+}
+
+/** Call when opening /go/...?ck=... on a new device — restores release rights without login. */
+export function adoptClaimFromUrl(planId: string, claimKey: string): void {
+  const ck = claimKey.trim();
+  if (!planId.trim() || !ck) return;
+  setClaimedPlanId(planId.trim(), ck);
 }
 
 export function clearClaimedPlanId(): void {
@@ -118,19 +131,38 @@ export function clearClaimedPlanId(): void {
   }
 }
 
-export function getClaimMeta(): { planId: string; claimedAtMs: number } | null {
+export function getClaimMeta(): {
+  planId: string;
+  claimedAtMs: number;
+  claimKey?: string;
+} | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = sessionStorage.getItem(CLAIM_META_KEY);
     if (!raw) return null;
-    const m = JSON.parse(raw) as { planId?: string; claimedAtMs?: number };
+    const m = JSON.parse(raw) as {
+      planId?: string;
+      claimedAtMs?: number;
+      claimKey?: string;
+    };
     if (typeof m.planId !== "string" || typeof m.claimedAtMs !== "number") {
       return null;
     }
-    return { planId: m.planId, claimedAtMs: m.claimedAtMs };
+    const out: { planId: string; claimedAtMs: number; claimKey?: string } = {
+      planId: m.planId,
+      claimedAtMs: m.claimedAtMs,
+    };
+    if (typeof m.claimKey === "string" && m.claimKey.trim()) {
+      out.claimKey = m.claimKey.trim();
+    }
+    return out;
   } catch {
     return null;
   }
+}
+
+export function getClaimKey(): string | null {
+  return getClaimMeta()?.claimKey ?? null;
 }
 
 function readPastClaimsRaw(): PastClaimRecord[] {
@@ -295,17 +327,49 @@ export function clearStoredPin(): void {
   }
 }
 
+export function getStoredPlanOccasion(): PlanOccasionId {
+  if (typeof window === "undefined") return "surprise";
+  try {
+    const raw = sessionStorage.getItem(OCCASION_KEY);
+    return normalizeOccasionId(raw);
+  } catch {
+    return "surprise";
+  }
+}
+
+export function setStoredPlanOccasion(id: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(OCCASION_KEY, normalizeOccasionId(id));
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Works on server and client when `area` is passed from searchParams. */
 export function buildPlansHref(
   area: string | null | undefined,
   radiusMiles?: number | null,
+  opts?: { occasion?: string | null },
 ): string {
   if (!area || !area.trim()) return "/plans";
   const r =
     radiusMiles != null && Number.isFinite(radiusMiles)
       ? clampRadiusMiles(radiusMiles)
       : DEFAULT_RADIUS_MILES;
-  return `/plans?area=${encodeURIComponent(area.trim())}&radius=${String(r)}`;
+  const q = new URLSearchParams();
+  q.set("area", area.trim());
+  q.set("radius", String(r));
+  let occ: PlanOccasionId;
+  if (opts != null && "occasion" in opts) {
+    occ = normalizeOccasionId(opts.occasion);
+  } else if (typeof window !== "undefined") {
+    occ = getStoredPlanOccasion();
+  } else {
+    occ = "surprise";
+  }
+  if (occ !== "surprise") q.set("occasion", occ);
+  return `/plans?${q.toString()}`;
 }
 
 export function setSkipDropFromLocation(): void {

@@ -4,7 +4,12 @@ import { getPlanById } from "@/lib/plans-data";
 
 type Props = {
   params: Promise<{ planId: string }>;
-  searchParams: Promise<{ area?: string; snapshot?: string; z?: string }>;
+  searchParams: Promise<{
+    area?: string;
+    snapshot?: string;
+    z?: string;
+    ck?: string;
+  }>;
 };
 
 export async function generateMetadata({
@@ -27,6 +32,7 @@ export default async function GoPlanPage({ params, searchParams }: Props) {
     area: areaFromQuery,
     snapshot: snapshotFromQuery,
     z: zFromQuery,
+    ck: ckFromQuery,
   } = await searchParams;
   const staticPlan = getPlanById(planId);
 
@@ -37,6 +43,7 @@ export default async function GoPlanPage({ params, searchParams }: Props) {
       areaHint={areaFromQuery ?? null}
       snapshotFromQuery={snapshotFromQuery ?? null}
       zFromQuery={zFromQuery ?? null}
+      ckFromQuery={ckFromQuery?.trim() || null}
     />
   );
 }

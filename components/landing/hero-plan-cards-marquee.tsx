@@ -22,7 +22,7 @@ function MiniPlanCardMock({ place }: { place: HeroMarqueePlace }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="hero-marquee-card group/card w-[11rem] shrink-0 overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-md ring-1 ring-zinc-100/80 transition hover:z-[2] hover:scale-[1.03] hover:shadow-lg hover:ring-brand/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 sm:w-[12.5rem]"
+      className="hero-marquee-card group/card w-[11rem] shrink-0 overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-md ring-1 ring-zinc-100/80 transition hover:shadow-lg hover:ring-brand/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 sm:w-[12.5rem]"
       aria-label={`${place.title} — open in Google Maps`}
     >
       <div className="relative aspect-[5/3] w-full bg-zinc-100">
@@ -30,7 +30,7 @@ function MiniPlanCardMock({ place }: { place: HeroMarqueePlace }) {
           src={place.imageSrc}
           alt={place.imageAlt}
           fill
-          className="object-cover transition duration-300 group-hover/card:scale-105"
+          className="object-cover"
           sizes="(max-width: 640px) 11rem, 12.5rem"
           unoptimized={isRemote}
         />
@@ -68,7 +68,12 @@ function MiniPlanCardMock({ place }: { place: HeroMarqueePlace }) {
  * Scrolling strip of real venues — hover or focus a card to pause; click opens Maps.
  */
 export function HeroPlanCardsMarquee() {
-  const loop = [...HERO_MARQUEE_PLACES, ...HERO_MARQUEE_PLACES];
+  const loop = [...HERO_MARQUEE_PLACES, ...HERO_MARQUEE_PLACES].filter(
+    (p, i, arr) => {
+      const prev = i === 0 ? arr[arr.length - 1] : arr[i - 1];
+      return !prev || prev.id !== p.id;
+    },
+  );
 
   return (
     <section

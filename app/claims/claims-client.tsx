@@ -16,6 +16,7 @@ import { useClaimedPlanId } from "@/hooks/use-claimed-plan-id";
 import { buildGoHref } from "@/lib/claim-links";
 import {
   buildPlansHref,
+  getClaimKey,
   getClaimMeta,
   getPastClaims,
   getStoredAiPlan,
@@ -258,7 +259,7 @@ export function ClaimsClient() {
                         </ul>
                       </div>
                       <Link
-                        href={buildGoHref(currentPlan, area, radiusMiles)}
+                        href={buildGoHref(currentPlan, area, radiusMiles, getClaimKey())}
                         className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-brand px-6 py-3 text-sm font-bold text-white shadow-lg shadow-brand/20 transition hover:bg-brand-hover"
                       >
                         Open crew briefing
@@ -350,7 +351,7 @@ export function ClaimsClient() {
                     <PlanMapPreview plan={currentPlan} className="mt-4" variant="go" />
                     <div className="mt-4 flex flex-wrap gap-2">
                       <Link
-                        href={buildGoHref(currentPlan, area, radiusMiles)}
+                        href={buildGoHref(currentPlan, area, radiusMiles, getClaimKey())}
                         className="inline-flex rounded-full bg-brand px-5 py-2.5 text-sm font-bold text-white transition hover:bg-brand-hover"
                       >
                         Briefing

@@ -4,7 +4,6 @@ import {
   Link01Icon,
   Location01Icon,
   SecurityCheckIcon,
-  UserMultiple02Icon,
   ZapIcon,
 } from "@hugeicons/core-free-icons";
 import Link from "next/link";
@@ -21,7 +20,7 @@ const detailBlocks: {
     icon: Globe02Icon,
     paragraphs: [
       "PlanDrop is a live board of real outings—venues, meet times, and vibes—so your group can pick something concrete in minutes instead of debating in the chat for an hour.",
-      "You do not create an account. Your browser session holds your claim in this demo, while Supabase tracks which plan IDs are taken so two groups cannot lock the same drop.",
+      "No account needed. Your picks are saved on this device, and claims are live so two groups can’t lock the same drop at the same time.",
     ],
     bullets: [
       "Homepage: famous places worldwide (curated photos, no AI wait).",
@@ -30,19 +29,11 @@ const detailBlocks: {
     ],
   },
   {
-    title: "Step 1 — Drop a pin (or type a city)",
+    title: "Discover — set your area and browse",
     icon: Location01Icon,
     paragraphs: [
-      "On the home hero, use the location search to set where you are planning from—city, neighborhood, or ZIP. We store that preference for the browse flow so the next step knows which area to use.",
-      "You can also open Browse plans directly and enter an area there. The pin or text is only used to bias search and AI generation; we are not building a social profile on you.",
-    ],
-  },
-  {
-    title: "Step 2 — Browse the live grid",
-    icon: UserMultiple02Icon,
-    paragraphs: [
-      "The grid shows cards with photos, vibe tags, duration, group size, and meet details. Filters let you narrow to chill, active, foodie, adventurous, or headcount.",
-      "Plans that someone else has already claimed disappear from the board for everyone, but the pool timer keeps running in the background. If they release the plan, it can show up again for others with the same countdown window.",
+      "On the home hero, use the location search to set where you are planning from—city, neighborhood, or ZIP—or use the optional /drop flow for a precise GPS pin. You can also open Browse plans directly and enter an area there. The pin or text only biases search and AI generation; we are not building a social profile on you.",
+      "The grid shows cards with photos, vibe tags, duration, group size, and meet details. Filters let you narrow to chill, active, foodie, adventurous, or headcount. Plans someone else claimed disappear from the board for everyone, but the pool timer keeps running; if they release, the plan can surface again with the same countdown.",
     ],
     bullets: [
       "Open a card for the full gallery, map preview, and hours when we have them from Google Places.",
@@ -50,27 +41,27 @@ const detailBlocks: {
     ],
   },
   {
-    title: "Step 3 — Lock it in (claim)",
+    title: "Claim — make it yours",
     icon: ZapIcon,
     paragraphs: [
       "The claim page is your last look: same photos and map as the card, plus price context and bullet list of what to expect at the stop.",
-      "When you claim, we POST to the server with an anonymous session id. If the slot is still free, the plan is marked claimed globally and your session stores the active plan id.",
+      "When you claim, the plan is locked for your group so it disappears from the live board for everyone else.",
       "Releasing too many times in a row triggers a short cool-down—this nudges people toward real plans instead of endlessly scouting venues.",
     ],
   },
   {
-    title: "Step 4 — Share and go",
+    title: "Brief — share and go",
     icon: Link01Icon,
     paragraphs: [
-      "After you claim, you land on the crew briefing. Copy the link to drop in your group chat; for AI plans the link uses a compressed payload so it stays shorter than an enormous JSON blob.",
-      "Anyone with the link can read the briefing. Only one session should claim the same plan id at a time—first claim wins live.",
+      "After you claim, you land on the crew briefing. Copy the link into your group chat so everyone has the plan in one place.",
+      "Anyone with the link can read the briefing. Only one group can hold the claim at a time—first claim wins.",
     ],
   },
   {
     title: "Your Claims hub",
     icon: SecurityCheckIcon,
     paragraphs: [
-      "Use the header button Your Claims to see your active itinerary, pool timer (when applicable), past releases from this browser session, and a small dashboard with map preview.",
+      "Use the header button Your Claims to see your active itinerary, pool timer (when applicable), past releases, and a small dashboard with map preview.",
       "Past entries are snapshots from when you released—handy if you want to remember where you almost went.",
     ],
   },
@@ -92,9 +83,8 @@ export function HowItWorksPageDetail() {
           The full picture
         </h2>
         <p className="mt-4 text-base leading-relaxed text-zinc-600">
-          Below is a deeper walkthrough of each part of the product—what happens in
-          the browser, what hits the server, and how your group gets from search to a
-          single locked plan.
+          Below is a deeper walkthrough of each part of the product—how your group
+          gets from search to a single locked plan.
         </p>
 
         <ol className="mt-12 space-y-14">

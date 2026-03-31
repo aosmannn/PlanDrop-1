@@ -1,6 +1,5 @@
 import {
   GridViewIcon,
-  Location01Icon,
   PartyIcon,
   ZapIcon,
 } from "@hugeicons/core-free-icons";
@@ -8,24 +7,19 @@ import { HugeIcon } from "@/components/ui/huge-icon";
 
 const steps = [
   {
-    icon: Location01Icon,
-    title: "Drop a pin",
-    body: "Enter your city or neighborhood. We surface plans designed for your exact area.",
-  },
-  {
     icon: GridViewIcon,
-    title: "Browse the drop",
-    body: "See the live grid of available plans — each with a vibe, duration, group size, and stops.",
+    title: "Discover",
+    body: "Set your area—home search, this pin step, or browse—and open the live grid. Each card shows vibe, duration, group size, and real stops.",
   },
   {
     icon: ZapIcon,
-    title: "Lock it in",
-    body: "Review the plan and tap Claim—your group gets a live hold, so no one double-books the same slot.",
+    title: "Claim",
+    body: "Review photos and the map, then lock the plan for your group. Live holds mean no one double-books the same slot.",
   },
   {
     icon: PartyIcon,
-    title: "Just show up",
-    body: "Share a link with your crew. They see venues, timing, and what to expect. Then just go.",
+    title: "Brief",
+    body: "Share the crew link so everyone sees venues, timing, and what to expect—then just go. No account needed.",
   },
 ] as const;
 
@@ -40,7 +34,7 @@ export function HowItWorksSection() {
           How PlanDrop works
         </p>
         <h2 className="font-display mt-4 text-3xl font-bold leading-snug tracking-[-0.02em] text-zinc-900 sm:text-4xl">
-          Four steps. Zero debates.
+          Three beats. Zero debates.
         </h2>
         <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-zinc-600 sm:text-lg">
           We did the planning so you don&apos;t have to argue for 40 minutes
@@ -48,7 +42,7 @@ export function HowItWorksSection() {
         </p>
       </div>
 
-      <div className="mx-auto mt-16 grid max-w-7xl gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mx-auto mt-16 grid max-w-7xl gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {steps.map((s, i) => (
           <div
             key={s.title}

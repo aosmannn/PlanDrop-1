@@ -1,3 +1,5 @@
+import { getStoredPlanOccasion } from "@/lib/claim-storage";
+import { normalizeOccasionId } from "@/lib/plan-occasion";
 import type { Plan } from "@/lib/plans-data";
 import { planToCompressedSnapshot } from "@/lib/plan-snapshot";
 import { clampRadiusMiles } from "@/lib/search-radius";
@@ -12,16 +14,28 @@ function appendRadius(q: URLSearchParams, radiusMiles?: number | null) {
   }
 }
 
+function appendOccasion(q: URLSearchParams, occasionId?: string | null) {
+  const occ =
+    occasionId != null && occasionId !== ""
+      ? normalizeOccasionId(occasionId)
+      : typeof window !== "undefined"
+        ? getStoredPlanOccasion()
+        : "surprise";
+  if (occ !== "surprise") q.set("occasion", occ);
+}
+
 /** In-app navigation: short URLs (no snapshot); AI plans use session storage. */
 export function buildClaimHref(
   plan: Plan,
   area: string | null | undefined,
   radiusMiles?: number | null,
+  occasionId?: string | null,
 ): string {
   const q = new URLSearchParams();
   const a = area?.trim();
   if (a) q.set("area", a);
   appendRadius(q, radiusMiles);
+  appendOccasion(q, occasionId);
   const qs = q.toString();
   return qs ? `/claim/${plan.id}?${qs}` : `/claim/${plan.id}`;
 }
@@ -30,11 +44,16 @@ export function buildGoHref(
   plan: Plan,
   area: string | null | undefined,
   radiusMiles?: number | null,
+  claimKey?: string | null,
+  occasionId?: string | null,
 ): string {
   const q = new URLSearchParams();
   const a = area?.trim();
   if (a) q.set("area", a);
   appendRadius(q, radiusMiles);
+  appendOccasion(q, occasionId);
+  const ck = claimKey?.trim();
+  if (ck) q.set("ck", ck);
   const qs = q.toString();
   return qs ? `/go/${plan.id}?${qs}` : `/go/${plan.id}`;
 }
@@ -46,6 +65,7 @@ export function buildGoShareQuery(
   plan: Plan,
   area: string | null | undefined,
   radiusMiles?: number | null,
+  options?: { includeClaimKey?: boolean; claimKey?: string | null },
 ): string {
   const q = new URLSearchParams();
   const a = area?.trim();
@@ -53,6 +73,13 @@ export function buildGoShareQuery(
   appendRadius(q, radiusMiles);
   if (isAiPlanId(plan.id)) {
     q.set("z", planToCompressedSnapshot(plan));
+  }
+  if (
+    options?.includeClaimKey &&
+    typeof options.claimKey === "string" &&
+    options.claimKey.trim()
+  ) {
+    q.set("ck", options.claimKey.trim());
   }
   return q.toString();
 }

@@ -11,6 +11,7 @@ export function usePlanClaims(): Set<string> {
     supabase
       .from("plan_claims")
       .select("plan_id")
+      .gt("expires_at", new Date().toISOString())
       .then(({ data }) => {
         if (data) setClaimed(new Set(data.map((r) => r.plan_id)));
       });
@@ -21,6 +22,8 @@ export function usePlanClaims(): Set<string> {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "plan_claims" },
         (payload) => {
+          const exp = payload.new.expires_at as string | undefined;
+          if (exp && Date.parse(exp) <= Date.now()) return;
           setClaimed((prev) => {
             const next = new Set(prev);
             next.add(payload.new.plan_id as string);

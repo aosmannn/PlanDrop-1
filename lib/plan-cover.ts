@@ -21,11 +21,34 @@ export function planCoverImageUrl(plan: Plan): string {
 export function planGalleryImageUrls(plan: Plan): { src: string; alt: string }[] {
   const out: { src: string; alt: string }[] = [];
   const seen = new Set<string>();
+
+  const canonicalKey = (src: string): string => {
+    const s = src.trim();
+    if (!s) return "";
+    // Treat Place Photo proxy URLs as the same image if the `ref` matches,
+    // regardless of cache-busting parameters like `pid`.
+    if (s.startsWith("/api/place-photo")) {
+      try {
+        const u = new URL(s, "http://local");
+        const ref = u.searchParams.get("ref")?.trim() ?? "";
+        return ref ? `place-photo:${ref}` : s;
+      } catch {
+        return s;
+      }
+    }
+    // For remote URLs, ignore query/hash so resized variants don't duplicate slides.
+    if (s.startsWith("https://") || s.startsWith("http://")) {
+      return s.split("#")[0]!.split("?")[0]!.trim();
+    }
+    return s;
+  };
+
   const push = (src: string, alt: string) => {
-    const k = src.trim();
-    if (!k || seen.has(k)) return;
+    const raw = src.trim();
+    const k = canonicalKey(raw);
+    if (!raw || !k || seen.has(k)) return;
     seen.add(k);
-    out.push({ src: k, alt });
+    out.push({ src: raw, alt });
   };
 
   const refs = plan.placePhotoRefs?.filter((r) => r?.trim()) ?? [];

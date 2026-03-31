@@ -167,11 +167,11 @@ function DropPageInner() {
   return (
     <>
       <SiteHeader />
-      <SetupFlowStepper currentStep={1} />
+      <SetupFlowStepper phase="discover" />
       <main className="px-4 pb-16 pt-8 sm:px-6 sm:pb-24 sm:pt-12 lg:px-8">
         <div className="mx-auto max-w-lg">
           <p className="text-sm font-bold uppercase tracking-widest text-brand">
-            Step 1 of 4
+            Discover
           </p>
           <h1 className="font-display mt-3 text-3xl font-bold leading-snug tracking-[-0.02em] text-zinc-900 sm:text-4xl">
             Drop a pin
@@ -284,7 +284,7 @@ function DropPageFallback() {
   return (
     <>
       <SiteHeader />
-      <SetupFlowStepper currentStep={1} />
+      <SetupFlowStepper phase="discover" />
       <main className="px-4 pb-16 pt-8 sm:px-6 sm:pb-24 sm:pt-12 lg:px-8">
         <div className="mx-auto max-w-lg">
           <p className="text-sm text-zinc-500">Loading…</p>

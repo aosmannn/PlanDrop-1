@@ -15,6 +15,7 @@ import {
   setStoredArea,
   setStoredPin,
   setStoredRadiusMiles,
+  setStoredPlanOccasion,
   type StoredPin,
 } from "@/lib/claim-storage";
 import {
@@ -93,7 +94,8 @@ export function HeroLocationSearch() {
       setSkipDropFromLocation();
       setStoredArea(trimmed);
       setStoredRadiusMiles(radiusMiles);
-      router.push(buildPlansHref(trimmed, radiusMiles));
+      setStoredPlanOccasion("surprise");
+      router.push(buildPlansHref(trimmed, radiusMiles, { occasion: "surprise" }));
     },
     [router, radiusMiles],
   );
@@ -149,13 +151,15 @@ export function HeroLocationSearch() {
         setStoredArea(label);
         setZip(label);
         setStoredRadiusMiles(radiusMiles);
-        router.push(buildPlansHref(label, radiusMiles));
+        setStoredPlanOccasion("surprise");
+        router.push(buildPlansHref(label, radiusMiles, { occasion: "surprise" }));
       } catch {
         const fallback = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
         setStoredArea(fallback);
         setZip(fallback);
         setStoredRadiusMiles(radiusMiles);
-        router.push(buildPlansHref(fallback, radiusMiles));
+        setStoredPlanOccasion("surprise");
+        router.push(buildPlansHref(fallback, radiusMiles, { occasion: "surprise" }));
       }
     } catch (e) {
       const code =

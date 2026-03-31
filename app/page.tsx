@@ -8,6 +8,7 @@ import { getHomepageStats } from "@/lib/homepage-stats";
 import { HowItWorksSection } from "@/components/landing/how-it-works-section";
 import { SiteFooter } from "@/components/landing/site-footer";
 import { SiteHeader } from "@/components/landing/site-header";
+import { ButtonLink } from "@/components/ui/button";
 
 export default function Home() {
   const stats = getHomepageStats();
@@ -29,9 +30,8 @@ export default function Home() {
             </p>
             <HeroHeadline />
             <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-zinc-600 sm:text-lg">
-              Browse famous spots below, or search your city for AI-built plans
-              for your crew. Claim in one tap—no spreadsheet, no group-chat
-              meltdown.
+              AI-built group outings, starting in Atlanta. Search your city to generate
+              fresh plans — new cities rolling out soon.
             </p>
             <HeroLocationSearch />
           </div>
@@ -43,9 +43,9 @@ export default function Home() {
           <div className="mx-auto mt-14 max-w-3xl px-4 sm:mt-16 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 gap-5 rounded-2xl border border-zinc-200/70 bg-zinc-50/90 p-6 shadow-sm ring-1 ring-zinc-100/80 sm:grid-cols-3 sm:gap-6 sm:p-8">
               {[
-                [String(stats.plansLiveToday), "Plans live today"],
-                [String(stats.citiesDropping), "Cities dropping"],
-                [stats.avgPlanLength, "Avg plan length"],
+                [String(stats.plansLiveToday), "Plans in the pool"],
+                ["Atlanta, GA", "Launch city"],
+                [stats.avgPlanLength, "Avg outing length"],
               ].map(([n, l]) => (
                 <div key={l} className="text-center">
                   <p className="font-display text-2xl font-semibold tabular-nums text-brand sm:text-4xl">
@@ -66,21 +66,29 @@ export default function Home() {
           <BrowsePlansSection />
         </Suspense>
 
-        {/* For groups */}
-        <section
-          id="for-groups"
-          className="scroll-mt-24 border-t border-zinc-100 px-4 py-12 text-center sm:px-6 lg:px-8"
-        >
-          <p className="text-base font-medium text-zinc-600">
-            Built for friend groups, teams, and anyone tired of the group chat
-            spiral.
-          </p>
-          <Link
-            href="/for-groups"
-            className="mt-4 inline-block text-sm font-semibold text-brand underline decoration-brand/30 underline-offset-4 hover:decoration-brand"
-          >
-            Why PlanDrop works for groups →
-          </Link>
+        {/* Venues CTA */}
+        <section className="scroll-mt-24 border-t border-zinc-100 px-4 py-12 text-center sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-2xl">
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-brand">
+              For venues
+            </p>
+            <h2 className="font-display mt-3 text-2xl font-bold tracking-[-0.03em] text-zinc-900 sm:text-3xl">
+              We send groups. You pay only for verified visits.
+            </h2>
+            <p className="mx-auto mt-3 max-w-prose text-sm leading-relaxed text-zinc-600 sm:text-base">
+              No coupons, no upfront ad spend. When a crew claims a plan and shows up, a
+              staff member verifies a quick code — that’s the only time you pay.
+            </p>
+            <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <ButtonLink href="/venues">See the venue program →</ButtonLink>
+              <Link
+                href="/venues/verify"
+                className="text-sm font-semibold text-zinc-700 underline decoration-zinc-300 underline-offset-4 transition hover:text-zinc-900"
+              >
+                Venue check-in →
+              </Link>
+            </div>
+          </div>
         </section>
 
         {/* CTA — floating card (full rounding + margin) so it doesn’t flush to the viewport edge */}
@@ -98,10 +106,10 @@ export default function Home() {
             <div className="pointer-events-none absolute -bottom-32 -left-16 h-80 w-80 rounded-full bg-brand-hover/25 blur-3xl" aria-hidden />
             <div className="relative px-6 py-16 text-center sm:px-12 sm:py-20 lg:py-24">
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-white/70">
-                Worldwide · tonight
+                Atlanta · live now
               </p>
               <h2 className="font-display mt-4 text-3xl font-bold leading-[1.15] tracking-[-0.03em] text-white sm:text-4xl lg:text-5xl">
-                Your group&apos;s next move is waiting.
+                Your crew&apos;s next move is waiting.
               </h2>
               <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
                 <Link

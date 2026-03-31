@@ -5,7 +5,14 @@ const nav = [
   ["/how-it-works", "How it works"],
   ["/drop", "Drop a pin"],
   ["/plans", "Browse plans"],
-  ["/for-groups", "For groups"],
+  ["/cities", "Cities"],
+  ["/venues", "For venues"],
+  ["/about", "About"],
+] as const;
+
+const company = [
+  ["/press", "Media kit"],
+  ["/case-studies", "Case studies"],
 ] as const;
 
 export function SiteFooter() {
@@ -18,10 +25,13 @@ export function SiteFooter() {
               <BrandLogoMark variant="footer" />
             </Link>
             <p className="mt-4 text-sm italic leading-relaxed text-zinc-500">
-              ready to drop
+              Ready to drop?
             </p>
             <p className="mt-3 text-sm leading-relaxed text-zinc-600">
               Live plans for your crew—claim a spot, share one link, go.
+            </p>
+            <p className="mt-3 text-xs leading-relaxed text-zinc-500">
+              Launching in Atlanta first. New cities coming soon.
             </p>
           </div>
 
@@ -35,6 +45,20 @@ export function SiteFooter() {
                   key={href}
                   href={href}
                   className="transition hover:text-zinc-900"
+                >
+                  {label}
+                </Link>
+              ))}
+            </nav>
+            <nav
+              className="flex flex-wrap gap-x-8 gap-y-3 text-xs font-semibold text-zinc-500 lg:justify-end"
+              aria-label="Company"
+            >
+              {company.map(([href, label]) => (
+                <Link
+                  key={href}
+                  href={href}
+                  className="transition hover:text-zinc-700"
                 >
                   {label}
                 </Link>

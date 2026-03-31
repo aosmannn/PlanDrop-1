@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { BrandLogoMark } from "@/components/brand-logo";
+import { ButtonLink } from "@/components/ui/button";
 
 const nav = [
   ["/how-it-works", "How it works"],
-  ["/drop", "Drop a pin"],
-  ["/plans", "Browse plans"],
-  ["/for-groups", "For groups"],
+  ["/drop", "Get started"],
+  ["/plans", "Explore plans"],
+  ["/cities", "Locations"],
+  ["/venues", "Venues"],
+  ["/about", "Our story"],
 ] as const;
 
 export function SiteHeader() {
@@ -48,13 +51,13 @@ export function SiteHeader() {
               ))}
             </div>
           </details>
-          <Link
+          <ButtonLink
             href="/claims"
-            className="pointer-events-auto inline-flex items-center gap-1 rounded-full bg-brand px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-brand/20 transition-all hover:-translate-y-0.5 hover:bg-brand-hover hover:shadow-brand/30 sm:px-5"
+            className="pointer-events-auto font-bold hover:-translate-y-0.5"
           >
-            Your Claims
+            Your plan
             <span aria-hidden>→</span>
-          </Link>
+          </ButtonLink>
         </div>
       </div>
     </header>

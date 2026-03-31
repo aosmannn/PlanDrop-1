@@ -24,7 +24,23 @@ export type PlaceDetailsEnrichment = {
   weekdayText?: string[];
   /** Extra photo refs from Place Details (merged with Text Search for larger galleries). */
   photoReferences?: string[];
+  rating?: number;
+  userRatingsTotal?: number;
+  reviews?: Array<{
+    author: string;
+    rating: number;
+    text: string;
+    relativeTime?: string;
+  }>;
 };
+
+type TtlCacheEntry<T> = { expiresAtMs: number; value: T };
+
+const PLACES_TEXTSEARCH_TTL_MS = 12 * 60 * 60 * 1000;
+const PLACES_DETAILS_TTL_MS = 12 * 60 * 60 * 1000;
+
+const textSearchCache = new Map<string, TtlCacheEntry<EnrichedPlace | null>>();
+const detailsCache = new Map<string, TtlCacheEntry<PlaceDetailsEnrichment | null>>();
 
 const PLACE_NAME_STOPWORDS = new Set([
   "a",
@@ -110,6 +126,10 @@ export async function getPlaceDetails(
   const key = process.env.GOOGLE_PLACES_API_KEY;
   if (!key?.trim() || !placeId.trim()) return null;
 
+  const cacheKey = placeId.trim();
+  const cached = detailsCache.get(cacheKey);
+  if (cached && cached.expiresAtMs > Date.now()) return cached.value;
+
   const fields = [
     "place_id",
     "url",
@@ -117,6 +137,9 @@ export async function getPlaceDetails(
     "formatted_address",
     "opening_hours",
     "photos",
+    "rating",
+    "user_ratings_total",
+    "reviews",
   ].join(",");
 
   const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(placeId.trim())}&fields=${encodeURIComponent(fields)}&key=${encodeURIComponent(key)}`;
@@ -130,12 +153,20 @@ export async function getPlaceDetails(
     result?: {
       url?: string;
       formatted_address?: string;
+      rating?: number;
+      user_ratings_total?: number;
       geometry?: { location: { lat: number; lng: number } };
       opening_hours?: {
         open_now?: boolean;
         weekday_text?: string[];
       };
       photos?: { photo_reference: string }[];
+      reviews?: Array<{
+        author_name?: string;
+        rating?: number;
+        text?: string;
+        relative_time_description?: string;
+      }>;
     };
   };
 
@@ -143,6 +174,10 @@ export async function getPlaceDetails(
     if (data.status !== "NOT_FOUND") {
       console.warn("Place details:", data.status, data.error_message);
     }
+    detailsCache.set(cacheKey, {
+      expiresAtMs: Date.now() + PLACES_DETAILS_TTL_MS,
+      value: null,
+    });
     return null;
   }
 
@@ -162,7 +197,24 @@ export async function getPlaceDetails(
     .filter((x, i, a) => a.indexOf(x) === i)
     .slice(0, 10);
 
-  return {
+  const reviewsRaw = r.reviews ?? [];
+  const reviews =
+    reviewsRaw.length > 0
+      ? reviewsRaw
+          .map((rev) => ({
+            author: (rev.author_name ?? "Google user").trim(),
+            rating:
+              typeof rev.rating === "number" && Number.isFinite(rev.rating)
+                ? rev.rating
+                : 0,
+            text: (rev.text ?? "").trim(),
+            relativeTime: rev.relative_time_description?.trim(),
+          }))
+          .filter((rev) => rev.text.length > 0)
+          .slice(0, 5)
+      : undefined;
+
+  const out: PlaceDetailsEnrichment = {
     mapsUrl: r.url?.trim(),
     lat: typeof lat === "number" && Number.isFinite(lat) ? lat : undefined,
     lng: typeof lng === "number" && Number.isFinite(lng) ? lng : undefined,
@@ -171,7 +223,22 @@ export async function getPlaceDetails(
     weekdayText: wh?.weekday_text,
     photoReferences:
       photoReferences.length > 0 ? photoReferences : undefined,
+    rating:
+      typeof r.rating === "number" && Number.isFinite(r.rating)
+        ? r.rating
+        : undefined,
+    userRatingsTotal:
+      typeof r.user_ratings_total === "number" &&
+      Number.isFinite(r.user_ratings_total)
+        ? r.user_ratings_total
+        : undefined,
+    reviews,
   };
+  detailsCache.set(cacheKey, {
+    expiresAtMs: Date.now() + PLACES_DETAILS_TTL_MS,
+    value: out,
+  });
+  return out;
 }
 
 /**
@@ -248,6 +315,16 @@ export async function findPlaceByText(
   const key = process.env.GOOGLE_PLACES_API_KEY;
   if (!key?.trim()) return null;
 
+  const cacheKey = JSON.stringify({
+    q: query.trim(),
+    lat: opts?.lat != null && Number.isFinite(opts.lat) ? Number(opts.lat.toFixed(4)) : null,
+    lng: opts?.lng != null && Number.isFinite(opts.lng) ? Number(opts.lng.toFixed(4)) : null,
+    radiusM: opts?.radiusM ?? null,
+    expected: expectedPrimaryName?.trim() ?? null,
+  });
+  const cached = textSearchCache.get(cacheKey);
+  if (cached && cached.expiresAtMs > Date.now()) return cached.value;
+
   let url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${encodeURIComponent(key)}`;
   if (
     opts?.lat != null &&
@@ -277,23 +354,47 @@ export async function findPlaceByText(
 
   if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
     console.warn("Places text search:", data.status, data.error_message);
+    textSearchCache.set(cacheKey, {
+      expiresAtMs: Date.now() + PLACES_TEXTSEARCH_TTL_MS,
+      value: null,
+    });
     return null;
   }
 
   const list = data.results ?? [];
-  if (list.length === 0) return null;
+  if (list.length === 0) {
+    textSearchCache.set(cacheKey, {
+      expiresAtMs: Date.now() + PLACES_TEXTSEARCH_TTL_MS,
+      value: null,
+    });
+    return null;
+  }
 
   const expected = expectedPrimaryName?.trim();
   if (expected) {
     for (const r of list.slice(0, 15)) {
       if (placeNamesLikelySame(r.name, expected)) {
-        return enrichedPlaceFromSearchResult(r);
+        const hit = enrichedPlaceFromSearchResult(r);
+        textSearchCache.set(cacheKey, {
+          expiresAtMs: Date.now() + PLACES_TEXTSEARCH_TTL_MS,
+          value: hit,
+        });
+        return hit;
       }
     }
+    textSearchCache.set(cacheKey, {
+      expiresAtMs: Date.now() + PLACES_TEXTSEARCH_TTL_MS,
+      value: null,
+    });
     return null;
   }
 
-  return enrichedPlaceFromSearchResult(list[0]!);
+  const hit = enrichedPlaceFromSearchResult(list[0]!);
+  textSearchCache.set(cacheKey, {
+    expiresAtMs: Date.now() + PLACES_TEXTSEARCH_TTL_MS,
+    value: hit,
+  });
+  return hit;
 }
 
 /** Take text after last em dash as the time / window phrase. */

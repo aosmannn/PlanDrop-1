@@ -13,5 +13,5 @@ export function PlansPageStepper() {
     clearSkipDropFromLocation();
   }, []);
 
-  return <SetupFlowStepper currentStep={2} areaHint={area} />;
+  return <SetupFlowStepper phase="discover" areaHint={area} />;
 }

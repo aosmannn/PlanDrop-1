@@ -6,27 +6,33 @@ import { CheckmarkCircle02Icon, MapsIcon, ZapIcon } from "@hugeicons/core-free-i
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import {
   canShowPlanMapPreview,
   PlanMapPreview,
 } from "@/components/plan-map-preview";
+import { PlanGoogleReviewsSection } from "@/components/plan-google-rating";
 import { PlanImageGallery } from "@/components/plan-image-gallery";
 import { SetupFlowStepper } from "@/components/setup-flow-stepper";
 import { SiteFooter } from "@/components/landing/site-footer";
 import { SiteHeader } from "@/components/landing/site-header";
 import { HugeIcon } from "@/components/ui/huge-icon";
 import { ClaimBanModal } from "@/components/claim-ban-modal";
+import { MessageModal } from "@/components/message-modal";
 import {
   buildPlansHref,
   getClaimedPlanId,
+  getClaimKey,
   getStoredAiPlan,
   getStoredArea,
   getStoredRadiusMiles,
   isClaimBanned,
   mergeAiPlanIntoStorage,
   setClaimedPlanId,
+  setStoredPlanOccasion,
   setStoredRadiusMiles,
 } from "@/lib/claim-storage";
+import { normalizeOccasionId } from "@/lib/plan-occasion";
 import { parseRadiusMilesParam } from "@/lib/search-radius";
 import { buildGoHref } from "@/lib/claim-links";
 import { buildGoogleMapsHref } from "@/lib/maps-links";
@@ -56,6 +62,9 @@ export function ClaimPlanClient({
   const [claiming, setClaiming] = useState(false);
   const [existingClaim, setExistingClaim] = useState<string | null>(null);
   const [banModalOpen, setBanModalOpen] = useState(false);
+  const [notice, setNotice] = useState<{ title: string; body: string } | null>(
+    null,
+  );
   const [claimBlocked, setClaimBlocked] = useState(false);
   const [poolNow, setPoolNow] = useState(() => Date.now());
 
@@ -75,6 +84,11 @@ export function ClaimPlanClient({
   }, [searchParams]);
 
   useEffect(() => {
+    const o = searchParams.get("occasion");
+    if (o) setStoredPlanOccasion(normalizeOccasionId(o));
+  }, [searchParams]);
+
+  useEffect(() => {
     const tick = () => setClaimBlocked(isClaimBanned());
     tick();
     const id = window.setInterval(tick, 1000);
@@ -88,7 +102,8 @@ export function ClaimPlanClient({
 
   useEffect(() => {
     if (staticPlan) {
-      setPlan(staticPlan);
+      const stored = getStoredAiPlan(staticPlan.id);
+      setPlan(stored ?? staticPlan);
       setResolved(true);
       return;
     }
@@ -108,6 +123,45 @@ export function ClaimPlanClient({
     setResolved(true);
   }, [planId, staticPlan, snapshotFromQuery, zFromQuery]);
 
+  // Static plans (from the demo seed) don't go through /api/ai-plans enrichment.
+  // If we don't yet have Google rating/reviews for them, fetch it once.
+  useEffect(() => {
+    if (!resolved || !plan) return;
+    if (!staticPlan) return; // only when rendering a static demo plan
+
+    const hasReviews = (plan.placeReviews?.length ?? 0) > 0;
+    const hasRating =
+      typeof plan.placeRating === "number" && Number.isFinite(plan.placeRating);
+    if (hasReviews || hasRating) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/enrich-plan-reviews", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ planIds: [plan.id] }),
+        });
+        if (!res.ok) return;
+        const data = (await res.json().catch(() => ({}))) as {
+          enrichments?: Record<string, Partial<Plan>>;
+        };
+        const fields = data?.enrichments?.[plan.id];
+        if (!fields) return;
+        const next = { ...plan, ...fields } as Plan;
+        mergeAiPlanIntoStorage(next);
+        if (!cancelled) setPlan(next);
+      } catch (e) {
+        console.error("static-review-enrich", e);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resolved, plan, staticPlan]);
+
+
   const area = areaFromQuery ?? getStoredArea() ?? "Atlanta, GA";
   const radiusMiles = getStoredRadiusMiles();
   const plansBack = buildPlansHref(area, radiusMiles);
@@ -116,11 +170,16 @@ export function ClaimPlanClient({
   const alreadyClaimedOther =
     existingClaim != null && existingClaim !== planId;
 
+  function showNotice(title: string, body: string) {
+    setNotice({ title, body });
+  }
+
   async function handleClaim() {
     if (!plan || isClaimedByAnyone || alreadyClaimedOther || alreadyClaimedThis) return;
     if (isPlanPoolExpired(plan, poolNow)) {
-      window.alert(
-        "This plan timed out and left the pool. Head back to browse for fresh drops.",
+      showNotice(
+        "This plan timed out",
+        "This drop left the pool. Head back to browse for fresh plans in your area.",
       );
       return;
     }
@@ -130,25 +189,75 @@ export function ClaimPlanClient({
     }
     setClaiming(true);
 
-    const res = await fetch("/api/claim-plan", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ planId: plan.id, sessionId: getSessionId() }),
-    });
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({})) as { error?: string };
-      setClaiming(false);
-      if (data.error === "already_claimed") {
-        alert("Someone just claimed this plan! Pick another one.");
+    try {
+      const supa = getSupabaseBrowser();
+      const authed = await supa.auth.getUser().catch(() => ({ data: { user: null } }));
+      const sessionId = authed?.data?.user?.id || getSessionId();
+      if (!sessionId) {
+        showNotice(
+          "Storage blocked",
+          "This browser blocked storage we need to lock a plan. Try a normal window or turn off private browsing, then refresh.",
+        );
+        return;
       }
-      return;
-    }
 
-    setClaimedPlanId(plan.id);
-    setClaiming(false);
-    mergeAiPlanIntoStorage(plan);
-    router.push(buildGoHref(plan, area, radiusMiles));
+      const res = await fetch("/api/claim-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId: plan.id, sessionId }),
+      });
+
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        claimKey?: string;
+      };
+
+      if (!res.ok) {
+        if (data.error === "already_have_claim") {
+          showNotice(
+            "You already have a plan locked",
+            "Release your current plan before claiming a new one.",
+          );
+        } else if (data.error === "already_claimed") {
+          showNotice(
+            "Just claimed",
+            "Someone else locked this plan a moment ago. Head back to browse and grab another drop.",
+          );
+        } else {
+          const msg =
+            typeof data.error === "string" && data.error.trim()
+              ? data.error.trim()
+              : "Couldn't lock this spot. Try again.";
+          showNotice("Couldn’t claim this plan", msg);
+        }
+        return;
+      }
+
+      const claimKey =
+        typeof data.claimKey === "string" && data.claimKey.trim()
+          ? data.claimKey.trim()
+          : null;
+
+      if (!claimKey) {
+        showNotice(
+          "Claim didn’t save",
+          "Something went wrong saving your lock. Refresh the page and try again.",
+        );
+        return;
+      }
+
+      setClaimedPlanId(plan.id, claimKey);
+      mergeAiPlanIntoStorage(plan);
+      router.push(buildGoHref(plan, area, radiusMiles, claimKey));
+    } catch (e) {
+      console.error("claim-plan", e);
+      showNotice(
+        "Connection issue",
+        "Couldn’t reach the server. Check your connection and try again.",
+      );
+    } finally {
+      setClaiming(false);
+    }
   }
 
   if (!resolved) {
@@ -184,23 +293,30 @@ export function ClaimPlanClient({
   return (
     <>
       <ClaimBanModal open={banModalOpen} onClose={() => setBanModalOpen(false)} />
+      <MessageModal
+        open={notice != null}
+        title={notice?.title ?? "Notice"}
+        onClose={() => setNotice(null)}
+      >
+        {notice?.body ?? ""}
+      </MessageModal>
       <SiteHeader />
-      <SetupFlowStepper currentStep={3} planId={plan.id} areaHint={area} />
+      <SetupFlowStepper phase="claim" planId={plan.id} areaHint={area} />
       <main className="px-4 pb-16 pt-8 sm:px-6 sm:pb-24 sm:pt-12 lg:px-8">
         <div className="mx-auto max-w-2xl">
           <p className="text-sm font-bold uppercase tracking-widest text-brand">
-            Step 3 of 4
+            Nice pick
           </p>
           <h1 className="font-display mt-3 flex items-center gap-2 text-3xl font-bold leading-snug tracking-[-0.02em] text-zinc-900 sm:text-4xl">
             <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-soft text-brand">
               <HugeIcon icon={ZapIcon} size={22} strokeWidth={1.5} />
             </span>
-            Lock it in
+            Make it yours
           </h1>
           <p className="mt-4 text-base leading-relaxed text-zinc-600">
-            Below you&apos;ll find photos, the map, and what to expect—then claim
-            the plan for your group. Holds update live, so two groups can&apos;t
-            take the same slot. In this demo, your browser session is the hold.
+            Photos, map, and the rundown below—then grab this slot for your crew.
+            Claims update live, so only one group can lock it. In this demo your
+            browser session holds the reservation.
           </p>
 
           {claimBlocked ? (
@@ -278,6 +394,7 @@ export function ClaimPlanClient({
                     <li key={line}>{line}</li>
                   ))}
                 </ul>
+                <PlanGoogleReviewsSection plan={plan} className="mt-5" />
               </div>
             </div>
           </div>
@@ -307,7 +424,7 @@ export function ClaimPlanClient({
                 href={(() => {
                   const p = getPlanById(existingClaim!) ?? getStoredAiPlan(existingClaim!);
                   return p
-                    ? buildGoHref(p, area, radiusMiles)
+                    ? buildGoHref(p, area, radiusMiles, getClaimKey())
                     : `/go/${existingClaim}`;
                 })()}
                 className="font-semibold text-brand underline decoration-brand/30"
@@ -343,7 +460,7 @@ export function ClaimPlanClient({
                     "Locking…"
                   ) : (
                     <>
-                      Claim & lock for my group
+                      Lock this spot for my crew
                       <span aria-hidden>→</span>
                     </>
                   )}
@@ -363,7 +480,7 @@ export function ClaimPlanClient({
               <HugeIcon icon={CheckmarkCircle02Icon} size={18} />
               You&apos;ve already locked this plan.{" "}
               <Link
-                href={buildGoHref(plan, area, radiusMiles)}
+                href={buildGoHref(plan, area, radiusMiles, getClaimKey())}
                 className="font-semibold underline"
               >
                 Crew briefing →

@@ -20,11 +20,18 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useId, useMemo, useState } from "react";
 import type { IconSvgElement } from "@hugeicons/react";
 import { ClaimBanModal } from "@/components/claim-ban-modal";
+import { MessageModal } from "@/components/message-modal";
 import { UnclaimConfirmModal } from "@/components/unclaim-confirm-modal";
 import { HugeIcon } from "@/components/ui/huge-icon";
 import { useClaimedPlanId } from "@/hooks/use-claimed-plan-id";
-import { useLiveViewingCount } from "@/hooks/use-live-viewing-count";
+import { usePlanPresenceCount } from "@/hooks/use-plan-presence-count";
 import { usePlanClaims } from "@/hooks/usePlanClaims";
+import { getSupabaseBrowser } from "@/lib/supabase-browser";
+import {
+  PlanCardReviewTeaser,
+  PlanGoogleRatingSummary,
+  PlanGoogleReviewsSection,
+} from "@/components/plan-google-rating";
 import { PlanImageGallery } from "@/components/plan-image-gallery";
 import { buildClaimHref, buildGoHref } from "@/lib/claim-links";
 import { buildGoogleMapsHref } from "@/lib/maps-links";
@@ -34,16 +41,21 @@ import {
   formatPoolTimeRemaining,
 } from "@/lib/plan-pool-expiry";
 import {
+  getClaimKey,
   getStoredAiPlan,
   getStoredArea,
   getStoredPin,
   isClaimBanned,
   releaseClaim,
   setStoredAiPlansMap,
+  mergeAiPlanIntoStorage,
   setStoredArea,
   setStoredRadiusMiles,
   buildPlansHref,
+  getStoredPlanOccasion,
+  setStoredPlanOccasion,
 } from "@/lib/claim-storage";
+import { normalizeOccasionId, type PlanOccasionId } from "@/lib/plan-occasion";
 import {
   clampRadiusMiles,
   parseRadiusMilesParam,
@@ -72,6 +84,7 @@ function PlanDetailModal({
   onClose,
   area,
   radiusMiles,
+  occasionId,
   claimedId,
   globalClaimed,
   onClaimClick,
@@ -81,6 +94,7 @@ function PlanDetailModal({
   onClose: () => void;
   area: string | null;
   radiusMiles: number;
+  occasionId: PlanOccasionId;
   claimedId: string | null;
   globalClaimed: Set<string>;
   onClaimClick: (e: React.MouseEvent) => void;
@@ -106,9 +120,15 @@ function PlanDetailModal({
   if (!plan) return null;
 
   const vibeLabel = plan.meta.split("·")[0].trim();
-  const claimHref = buildClaimHref(plan, area, radiusMiles);
-  const goHref = buildGoHref(plan, area, radiusMiles);
+  const claimHref = buildClaimHref(plan, area, radiusMiles, occasionId);
   const isMine = claimedId === plan.id;
+  const goHref = buildGoHref(
+    plan,
+    area,
+    radiusMiles,
+    isMine ? getClaimKey() : null,
+    occasionId,
+  );
   const hasOtherClaim = claimedId !== null && claimedId !== plan.id;
   const isClaimedByAnyone = globalClaimed.has(plan.id);
   const claimedPlanResolved =
@@ -158,11 +178,14 @@ function PlanDetailModal({
                   >
                     {vibeLabel}
                   </p>
-                  <span
-                    className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-bold tabular-nums sm:text-sm ${!isClaimedByAnyone || isMine ? "bg-white text-zinc-800 ring-1 ring-zinc-200/80" : "bg-zinc-100/80 text-zinc-400"}`}
-                  >
-                    {plan.price}
-                  </span>
+                  <div className="flex shrink-0 flex-col items-end gap-0.5">
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-xs font-bold tabular-nums sm:text-sm ${!isClaimedByAnyone || isMine ? "bg-white text-zinc-800 ring-1 ring-zinc-200/80" : "bg-zinc-100/80 text-zinc-400"}`}
+                    >
+                      {plan.price}
+                    </span>
+                    <PlanGoogleRatingSummary plan={plan} />
+                  </div>
                 </div>
                 <h2
                   id={titleId}
@@ -226,6 +249,7 @@ function PlanDetailModal({
                     </li>
                   ))}
                 </ul>
+                <PlanGoogleReviewsSection plan={plan} className="mt-4" />
                 {plan.openingHoursWeekday && plan.openingHoursWeekday.length > 0 ? (
                   <details className="mt-3 text-xs text-zinc-600">
                     <summary className="cursor-pointer font-semibold text-zinc-700">
@@ -268,7 +292,13 @@ function PlanDetailModal({
                 <Link
                   href={
                     claimedPlanResolved
-                      ? buildGoHref(claimedPlanResolved, area, radiusMiles)
+                      ? buildGoHref(
+                          claimedPlanResolved,
+                          area,
+                          radiusMiles,
+                          getClaimKey(),
+                          occasionId,
+                        )
                       : `/go/${claimedId}`
                   }
                   onClick={onClose}
@@ -349,10 +379,7 @@ function PlanCardRightBadges({
     return () => window.clearInterval(id);
   }, []);
 
-  const viewers = useLiveViewingCount(
-    plan.id,
-    eligible && plan.viewing != null ? plan.viewing : undefined,
-  );
+  const viewers = usePlanPresenceCount(plan.id, eligible);
 
   if (!eligible) return null;
 
@@ -416,8 +443,13 @@ function BrowsePlansSectionInner() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const urlArea = searchParams.get("area")?.trim() ?? "";
+  const urlOccasion = searchParams.get("occasion");
   const radiusMiles = parseRadiusMilesParam(searchParams.get("radius"));
   const isHomePage = pathname === "/";
+  const baseOccasionId = useMemo(
+    () => normalizeOccasionId(urlOccasion ?? getStoredPlanOccasion()),
+    [urlOccasion],
+  );
   const [storageArea, setStorageArea] = useState("");
 
   useEffect(() => {
@@ -439,6 +471,22 @@ function BrowsePlansSectionInner() {
     if (areaTrim) setStoredRadiusMiles(radiusMiles);
   }, [areaTrim, radiusMiles]);
 
+  useEffect(() => {
+    if (!areaTrim || isHomePage) return;
+    setStoredPlanOccasion(baseOccasionId);
+  }, [areaTrim, isHomePage, baseOccasionId]);
+
+  useEffect(() => {
+    if (!areaTrim || isHomePage) return;
+    if (urlOccasion) return;
+    const stored = getStoredPlanOccasion();
+    if (stored !== "surprise") {
+      router.replace(
+        buildPlansHref(areaTrim, radiusMiles, { occasion: stored }),
+      );
+    }
+  }, [areaTrim, radiusMiles, urlOccasion, isHomePage, router]);
+
   const claimedId = useClaimedPlanId();
   const globalClaimed = usePlanClaims();
 
@@ -446,7 +494,7 @@ function BrowsePlansSectionInner() {
   const isDemoCatalog = !isHomePage && !areaTrim;
   const areaLabel = useMemo(() => {
     if (isHomePage) {
-      return "major cities worldwide";
+      return "Atlanta (launch city) — more soon";
     }
     if (isDemoCatalog) return formatAreaDisplay("Atlanta, GA");
     return formatAreaDisplay(areaTrim);
@@ -459,7 +507,13 @@ function BrowsePlansSectionInner() {
   const [aiError, setAiError] = useState<string | null>(null);
   const [banModalOpen, setBanModalOpen] = useState(false);
   const [unclaimOpen, setUnclaimOpen] = useState(false);
+  const [releaseNotice, setReleaseNotice] = useState<{
+    title: string;
+    body: string;
+  } | null>(null);
   const [poolNow, setPoolNow] = useState(() => Date.now());
+  const [staticReviewsLoading, setStaticReviewsLoading] = useState(false);
+  const [staticReviewsVersion, setStaticReviewsVersion] = useState(0);
 
   useEffect(() => {
     const id = window.setInterval(() => setPoolNow(Date.now()), 10_000);
@@ -484,9 +538,11 @@ function BrowsePlansSectionInner() {
           lat?: number;
           lng?: number;
           radiusMiles: number;
+          occasion: string;
         } = {
           area: areaTrim,
           radiusMiles,
+          occasion: baseOccasionId,
         };
         if (pin) {
           body.lat = pin.lat;
@@ -521,11 +577,11 @@ function BrowsePlansSectionInner() {
     return () => {
       cancelled = true;
     };
-  }, [areaTrim, radiusMiles, isHomePage]);
+  }, [areaTrim, radiusMiles, isHomePage, baseOccasionId]);
 
   const boardPlans = useMemo(() => {
     if (isHomePage) {
-      return TOP_PLACES_CATALOG;
+      return PLANS;
     }
     if (!areaTrim) {
       return PLANS;
@@ -545,10 +601,82 @@ function BrowsePlansSectionInner() {
   }, [isHomePage, areaTrim, aiPlans, aiLoading, poolNow, globalClaimed]);
 
   /** Globally claimed plans stay in the pool for timers but are hidden from the grid. */
-  const visibleBoardPlans = useMemo(
-    () => boardPlans.filter((p) => !globalClaimed.has(p.id)),
-    [boardPlans, globalClaimed],
+  const enrichedBoardPlans = useMemo(
+    () => {
+      // Force recompute after we cache enriched static-plan reviews.
+      staticReviewsVersion;
+      return boardPlans.map((p) => getStoredAiPlan(p.id) ?? p);
+    },
+    [boardPlans, staticReviewsVersion],
   );
+
+  const visibleBoardPlans = useMemo(
+    () => enrichedBoardPlans.filter((p) => !globalClaimed.has(p.id)),
+    [enrichedBoardPlans, globalClaimed],
+  );
+
+  useEffect(() => {
+    // Only enrich the static demo cards (Atlanta / no area query).
+    if (!(isHomePage || !areaTrim)) return;
+    if (aiLoading) return;
+    if (staticReviewsLoading) return;
+    if (!boardPlans.length) return;
+
+    const idsToEnrich = boardPlans
+      .map((plan) => {
+        const stored = getStoredAiPlan(plan.id);
+        return { plan, target: stored ?? plan };
+      })
+      .filter(({ target }) => {
+        const hasReviews = (target.placeReviews?.length ?? 0) > 0;
+        const hasRating =
+          typeof target.placeRating === "number" && Number.isFinite(target.placeRating);
+        return !hasReviews && !hasRating;
+      })
+      .map(({ plan }) => plan.id);
+
+    if (idsToEnrich.length === 0) return;
+
+    let cancelled = false;
+    const run = async () => {
+      setStaticReviewsLoading(true);
+      try {
+        const res = await fetch("/api/enrich-plan-reviews", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ planIds: idsToEnrich }),
+        });
+        if (!res.ok) return;
+        const data = (await res.json().catch(() => ({}))) as {
+          enrichments?: Record<
+            string,
+            Partial<
+              Pick<Plan, "placeRating" | "placeUserRatingsTotal" | "placeReviews">
+            >
+          >;
+        };
+        const enrichments = data?.enrichments ?? {};
+        for (const [id, fields] of Object.entries(enrichments)) {
+          const plan = boardPlans.find((p) => p.id === id);
+          if (!plan || !fields) continue;
+          mergeAiPlanIntoStorage({ ...plan, ...fields } as Plan);
+        }
+        if (!cancelled) setStaticReviewsVersion((v) => v + 1);
+      } finally {
+        if (!cancelled) setStaticReviewsLoading(false);
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isHomePage,
+    areaTrim,
+    aiLoading,
+    boardPlans,
+    staticReviewsLoading,
+  ]);
 
   const filteredPlans = useMemo(
     () => visibleBoardPlans.filter((p) => planMatchesFilter(p, active)),
@@ -584,7 +712,13 @@ function BrowsePlansSectionInner() {
 
   const lockedPlanGoHref =
     lockedPlan != null
-      ? buildGoHref(lockedPlan, areaForLinks, radiusMiles)
+      ? buildGoHref(
+          lockedPlan,
+          areaForLinks,
+          radiusMiles,
+          getClaimKey(),
+          baseOccasionId,
+        )
       : claimedId
         ? `/go/${claimedId}`
         : "#";
@@ -594,7 +728,7 @@ function BrowsePlansSectionInner() {
     setStoredRadiusMiles(r);
     if (areaTrim) {
       router.replace(
-        `/plans?area=${encodeURIComponent(areaTrim)}&radius=${String(r)}`,
+        buildPlansHref(areaTrim, r, { occasion: baseOccasionId }),
       );
     }
   }
@@ -610,12 +744,18 @@ function BrowsePlansSectionInner() {
     setUnclaimOpen(false);
 
     if (claimedId) {
+      const supa = getSupabaseBrowser();
+      const authed = await supa.auth
+        .getUser()
+        .catch(() => ({ data: { user: null } }));
+      const sid = authed?.data?.user?.id || getSessionId();
       await fetch("/api/unclaim-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           planId: claimedId,
-          sessionId: getSessionId(),
+          sessionId: sid,
+          claimKey: getClaimKey() ?? undefined,
         }),
       });
     }
@@ -627,13 +767,17 @@ function BrowsePlansSectionInner() {
       return;
     }
     if (r.strikeAfter === 1) {
-      window.alert(
-        "Got it. Releasing too many times in a row can temporarily block new claims — we want real plans, not venue scouting.",
-      );
+      setReleaseNotice({
+        title: "Got it",
+        body:
+          "Releasing too many times in a row can temporarily block new claims — we want real plans, not venue scouting.",
+      });
     } else if (r.strikeAfter === 2) {
-      window.alert(
-        "Second release this session. One more release and new claims pause for 5 minutes to stop repeat scouting.",
-      );
+      setReleaseNotice({
+        title: "One more release triggers a cooldown",
+        body:
+          "Second release this session. One more release and new claims pause for 5 minutes to stop repeat scouting.",
+      });
     }
     setDetailPlan(null);
   }
@@ -641,6 +785,13 @@ function BrowsePlansSectionInner() {
   return (
     <>
       <ClaimBanModal open={banModalOpen} onClose={() => setBanModalOpen(false)} />
+      <MessageModal
+        open={releaseNotice != null}
+        title={releaseNotice?.title ?? "Notice"}
+        onClose={() => setReleaseNotice(null)}
+      >
+        {releaseNotice?.body ?? ""}
+      </MessageModal>
       <UnclaimConfirmModal
         open={unclaimOpen}
         onClose={() => setUnclaimOpen(false)}
@@ -651,6 +802,7 @@ function BrowsePlansSectionInner() {
         onClose={() => setDetailPlan(null)}
         area={areaForLinks}
         radiusMiles={radiusMiles}
+        occasionId={baseOccasionId}
         claimedId={claimedId}
         globalClaimed={globalClaimed}
         onClaimClick={onClaimClick}
@@ -712,7 +864,12 @@ function BrowsePlansSectionInner() {
                 <Link
                   href={
                     firstOpenPlan
-                      ? buildClaimHref(firstOpenPlan, areaForLinks, radiusMiles)
+                      ? buildClaimHref(
+                          firstOpenPlan,
+                          areaForLinks,
+                          radiusMiles,
+                          baseOccasionId,
+                        )
                       : "#plans"
                   }
                   onClick={firstOpenPlan ? onClaimClick : undefined}
@@ -726,7 +883,7 @@ function BrowsePlansSectionInner() {
                   <span aria-hidden>→</span>
                 </Link>
                 <Link
-                  href="/#hero-locate"
+                  href={isHomePage ? "/#hero-locate" : "/drop?edit=1"}
                   className="inline-flex h-10 items-center justify-center rounded-full border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50"
                 >
                   Change location
@@ -772,7 +929,9 @@ function BrowsePlansSectionInner() {
                   href={
                     isHomePage || !areaTrim
                       ? "/plans"
-                      : buildPlansHref(areaTrim, radiusMiles)
+                      : buildPlansHref(areaTrim, radiusMiles, {
+                          occasion: baseOccasionId,
+                        })
                   }
                   className="shrink-0 self-start text-sm font-semibold text-zinc-900 underline decoration-zinc-400 underline-offset-4 transition hover:decoration-brand hover:text-brand"
                 >
@@ -798,7 +957,7 @@ function BrowsePlansSectionInner() {
               </div>
             ) : areaTrim && !aiLoading ? (
               <Link
-                href="/#hero-locate"
+                href={isHomePage ? "/#hero-locate" : "/drop?edit=1"}
                 className="shrink-0 self-start text-sm font-semibold text-brand underline decoration-brand/30 underline-offset-4 transition hover:decoration-brand sm:mt-8"
               >
                 Try another location →
@@ -968,6 +1127,30 @@ function BrowsePlansSectionInner() {
                       >
                         {plan.tagline}
                       </p>
+                      <div className="mt-1.5">
+                        <PlanGoogleRatingSummary plan={plan} />
+                      </div>
+                      <PlanCardReviewTeaser plan={plan} />
+                      {activityBulletsForDisplay(plan).length > 0 ? (
+                        <div className="mt-2.5">
+                          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                            At this spot
+                          </p>
+                          <ul className="mt-1 list-none space-y-1 pl-0">
+                            {activityBulletsForDisplay(plan)
+                              .slice(0, 2)
+                              .map((line) => (
+                                <li
+                                  key={line}
+                                  className="line-clamp-2 text-[11px] leading-snug text-zinc-600"
+                                >
+                                  <span className="font-medium text-brand">·</span>{" "}
+                                  {line}
+                                </li>
+                              ))}
+                          </ul>
+                        </div>
+                      ) : null}
                       <div className="mt-3 flex items-start gap-1.5 text-xs font-medium leading-snug text-zinc-700">
                         <div className="mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-brand/10">
                           <HugeIcon
@@ -1010,7 +1193,7 @@ function BrowsePlansSectionInner() {
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
                           <button
                             type="button"
-                            onClick={() => setDetailPlan(plan)}
+                            onClick={() => setDetailPlan(getStoredAiPlan(plan.id) ?? plan)}
                             className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-center text-xs font-semibold text-zinc-900 transition hover:bg-zinc-50 sm:order-1 sm:w-auto"
                           >
                             View
@@ -1018,7 +1201,13 @@ function BrowsePlansSectionInner() {
                           {isMine ? (
                             <div className="flex w-full flex-col gap-2 sm:order-2 sm:w-auto sm:min-w-[200px]">
                               <Link
-                                href={buildGoHref(plan, areaForLinks, radiusMiles)}
+                                href={buildGoHref(
+                                  plan,
+                                  areaForLinks,
+                                  radiusMiles,
+                                  isMine ? getClaimKey() : null,
+                                  baseOccasionId,
+                                )}
                                 className="block w-full shrink-0 rounded-lg bg-brand px-3 py-2.5 text-center text-xs font-bold text-white shadow-sm transition-all hover:bg-brand-hover"
                               >
                                 Your plan →
@@ -1059,7 +1248,12 @@ function BrowsePlansSectionInner() {
                             </button>
                           ) : (
                             <Link
-                              href={buildClaimHref(plan, areaForLinks, radiusMiles)}
+                              href={buildClaimHref(
+                                plan,
+                                areaForLinks,
+                                radiusMiles,
+                                baseOccasionId,
+                              )}
                               onClick={onClaimClick}
                               className="w-full shrink-0 rounded-lg bg-brand px-3 py-2.5 text-center text-xs font-bold text-white shadow-sm transition-all hover:bg-brand-hover sm:order-2 sm:w-auto"
                             >

@@ -40,6 +40,15 @@ export type Plan = {
   locationDetails: string[];
   /** AI plans: ISO time when this offer leaves the pool if still unclaimed (based on duration, stops, vibe). */
   poolExpiresAt?: string;
+  /** From Google Places (when enriched). */
+  placeRating?: number;
+  placeUserRatingsTotal?: number;
+  placeReviews?: Array<{
+    author: string;
+    rating: number;
+    text: string;
+    relativeTime?: string;
+  }>;
 };
 
 /** Venue-only extras (Wikimedia Commons, CC licenses). Keep each plan’s list scoped to that place. */
@@ -59,6 +68,13 @@ const KROG_GALLERY_EXTRAS = [
   "https://upload.wikimedia.org/wikipedia/commons/a/a7/Krog_Street_Market.jpg",
 ] as const;
 
+const PONCE_COVER =
+  "https://commons.wikimedia.org/wiki/Special:FilePath/Ponce_City_Market,_Atlanta.jpg";
+const PIEDMONT_COVER =
+  "https://commons.wikimedia.org/wiki/Special:FilePath/Lake_Clara_Meer_in_Atlanta,_GA,_USA.jpg";
+const KROG_COVER =
+  "https://commons.wikimedia.org/wiki/Special:FilePath/Krog_Street_Tunnel_-_Atlanta,_GA_-_Flickr_-_hyku_(31).jpg";
+
 export const PLANS: Plan[] = [
   {
     id: "1",
@@ -68,12 +84,12 @@ export const PLANS: Plan[] = [
     meta: "CHILL · 4–6 PEOPLE · 2.5 HRS",
     metaClass: "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100",
     stop: "Ponce City Market (6:30 PM)",
-    coverImageSrc: "/images/ponce-city-market.png",
+    coverImageSrc: PONCE_COVER,
     coverImageAlt:
       "Ponce City Market exterior with orange awning and signage in Atlanta",
     photoCredit: "Ponce City Market - Atlanta",
     galleryImageSrcs: [
-      "/images/ponce-city-market.png",
+      PONCE_COVER,
       ...PONCE_GALLERY_EXTRAS,
     ],
     placeLat: 33.7721,
@@ -102,12 +118,12 @@ export const PLANS: Plan[] = [
     meta: "ACTIVE · 2–4 PEOPLE · 2 HRS",
     metaClass: "bg-brand-soft text-brand ring-1 ring-brand/20",
     stop: "Piedmont Park — 12th St & Piedmont Ave (8:00 AM)",
-    coverImageSrc: "/images/piedmont-park-clara-meer.png",
+    coverImageSrc: PIEDMONT_COVER,
     coverImageAlt:
       "Lake Clara Meer in Piedmont Park with Midtown Atlanta skyline reflected on the water",
     photoCredit: "Piedmont Park - Atlanta",
     galleryImageSrcs: [
-      "/images/piedmont-park-clara-meer.png",
+      PIEDMONT_COVER,
       ...PIEDMONT_GALLERY_EXTRAS,
     ],
     placeLat: 33.786,
@@ -136,11 +152,11 @@ export const PLANS: Plan[] = [
     meta: "FOODIE · 4 PEOPLE · 3 HRS",
     metaClass: "bg-amber-50 text-amber-800 ring-1 ring-amber-100",
     stop: "Krog Street Market (7:15 PM)",
-    coverImageSrc: "/images/krog-street-market.png",
+    coverImageSrc: KROG_COVER,
     coverImageAlt:
       "Krog Street Market exterior at dusk with patio, signage, and parking in front",
     photoCredit: "Krog Street Market - Atlanta",
-    galleryImageSrcs: ["/images/krog-street-market.png", ...KROG_GALLERY_EXTRAS],
+    galleryImageSrcs: [KROG_COVER, ...KROG_GALLERY_EXTRAS],
     placeLat: 33.752,
     placeLng: -84.3644,
     formattedAddress: "99 Krog St NE, Atlanta, GA 30307, USA",
@@ -157,6 +173,151 @@ export const PLANS: Plan[] = [
       "Browse beer and wine at Hop City–style counters before you commit to food.",
       "Stroll Krog Street Tunnel murals if you want a quick art break between bites.",
       "Easy parking and BeltLine access for late arrivals.",
+    ],
+  },
+  {
+    id: "4",
+    title: "BeltLine Eastside Trail sunset",
+    tagline: "Golden-hour walk, murals, and choose-your-own stop vibes.",
+    price: "Free",
+    meta: "ACTIVE · 2–8 PEOPLE · 2 HRS",
+    metaClass: "bg-brand-soft text-brand ring-1 ring-brand/20",
+    stop: "BeltLine Eastside Trail (6:00 PM)",
+    coverImageSrc:
+      "https://commons.wikimedia.org/wiki/Special:FilePath/Irwin_street_market_o4w_atlanta.JPG",
+    coverImageAlt: "Irwin Street Market in Atlanta's Old Fourth Ward",
+    photoCredit: "BeltLine - Atlanta",
+    galleryImageSrcs: [
+      "https://commons.wikimedia.org/wiki/Special:FilePath/Irwin_street_market_o4w_atlanta.JPG",
+    ],
+    formattedAddress: "Atlanta BeltLine Eastside Trail, Atlanta, GA, USA",
+    duration: "2 hrs",
+    groupLabel: "2–8",
+    vibe: "active",
+    minGroup: 2,
+    maxGroup: 8,
+    available: true,
+    viewing: 10,
+    locationDetails: [
+      "Meet at a landmark mural so late arrivals can find you easily.",
+      "Walk until the crew picks a drink/food stop that fits the moment.",
+      "Flexible pacing—works even if people peel off early.",
+    ],
+  },
+  {
+    id: "5",
+    title: "Little Five Points night wander",
+    tagline: "Dive bars, record shops, and late-night people-watching.",
+    price: "~$20–50/pp",
+    meta: "ADV · 2–8 PEOPLE · 3 HRS",
+    metaClass: "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100",
+    stop: "Little Five Points (8:00 PM)",
+    coverImageSrc:
+      "https://commons.wikimedia.org/wiki/Special:FilePath/Little_five_points_shops.jpg",
+    coverImageAlt: "Shops in Little Five Points, Atlanta",
+    photoCredit: "Little Five Points - Atlanta",
+    galleryImageSrcs: [
+      "https://commons.wikimedia.org/wiki/Special:FilePath/Little_five_points_shops.jpg",
+    ],
+    formattedAddress: "Little Five Points, Atlanta, GA, USA",
+    duration: "3 hrs",
+    groupLabel: "2–8",
+    vibe: "adv",
+    minGroup: 2,
+    maxGroup: 8,
+    available: true,
+    viewing: 12,
+    locationDetails: [
+      "Start with one anchor bar, then rotate every 45–60 minutes.",
+      "Easy for mixed crews—wanderers + sitters both win.",
+      "End with a quick late snack nearby.",
+    ],
+  },
+  {
+    id: "6",
+    title: "Mercedes-Benz Stadium circuit",
+    tagline: "Downtown energy, skyline shots, and a fast pregame loop.",
+    price: "Free",
+    meta: "ADV · 2–6 PEOPLE · 2 HRS",
+    metaClass: "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100",
+    stop: "Mercedes-Benz Stadium (4:30 PM)",
+    coverImageSrc:
+      "https://commons.wikimedia.org/wiki/Special:FilePath/Mercedes-Benz_Stadium_with_the_Georgia_Dome_remains_in_the_foreground_(27663350329).jpg",
+    coverImageAlt: "Mercedes-Benz Stadium in Atlanta",
+    photoCredit: "Mercedes-Benz Stadium - Atlanta",
+    galleryImageSrcs: [
+      "https://commons.wikimedia.org/wiki/Special:FilePath/Mercedes-Benz_Stadium_with_the_Georgia_Dome_remains_in_the_foreground_(27663350329).jpg",
+    ],
+    formattedAddress: "1 AMB Dr NW, Atlanta, GA 30313, USA",
+    duration: "2 hrs",
+    groupLabel: "2–6",
+    vibe: "adv",
+    minGroup: 2,
+    maxGroup: 6,
+    available: true,
+    viewing: 8,
+    locationDetails: [
+      "Meet at a clear entrance and do a quick loop for photos.",
+      "Works great pre-game/event or as a downtown anchor stop.",
+      "Pair with food nearby after the walk.",
+    ],
+  },
+  {
+    id: "7",
+    title: "Atlantic Station easy night out",
+    tagline: "Walkable blocks, simple logistics, quick decisions.",
+    price: "~$15–40/pp",
+    meta: "CHILL · 2–6 PEOPLE · 2.5 HRS",
+    metaClass: "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100",
+    stop: "Atlantic Station (7:00 PM)",
+    coverImageSrc:
+      "https://commons.wikimedia.org/wiki/Special:FilePath/Atlantic_Station_parking_deck_and_shopping_district.jpg",
+    coverImageAlt: "Atlantic Station shopping district, Atlanta",
+    photoCredit: "Atlantic Station - Atlanta",
+    galleryImageSrcs: [
+      "https://commons.wikimedia.org/wiki/Special:FilePath/Atlantic_Station_parking_deck_and_shopping_district.jpg",
+    ],
+    formattedAddress: "Atlantic Station, Atlanta, GA, USA",
+    duration: "2.5 hrs",
+    groupLabel: "2–6",
+    vibe: "chill",
+    minGroup: 2,
+    maxGroup: 6,
+    available: true,
+    viewing: 9,
+    locationDetails: [
+      "Start with a drink/coffee, then decide dinner once everyone’s present.",
+      "Compact area so nobody gets lost.",
+      "Good fallback when the group needs easy logistics.",
+    ],
+  },
+  {
+    id: "8",
+    title: "Midtown arts & eats",
+    tagline: "One anchor dinner, one nightcap, zero over-planning.",
+    price: "~$20–60/pp",
+    meta: "FOODIE · 2–6 PEOPLE · 3 HRS",
+    metaClass: "bg-amber-50 text-amber-800 ring-1 ring-amber-100",
+    stop: "Midtown (6:30 PM)",
+    coverImageSrc:
+      "https://commons.wikimedia.org/wiki/Special:FilePath/Midtown_Atlanta_skyline_from_Clara_Meer_in_Piedmont_Park.JPG",
+    coverImageAlt: "Midtown Atlanta skyline from Piedmont Park",
+    photoCredit: "Midtown - Atlanta",
+    galleryImageSrcs: [
+      "https://commons.wikimedia.org/wiki/Special:FilePath/Midtown_Atlanta_skyline_from_Clara_Meer_in_Piedmont_Park.JPG",
+    ],
+    formattedAddress: "Midtown, Atlanta, GA, USA",
+    duration: "3 hrs",
+    groupLabel: "2–6",
+    vibe: "foodie",
+    minGroup: 2,
+    maxGroup: 6,
+    available: true,
+    viewing: 11,
+    locationDetails: [
+      "Pick one anchor restaurant, then do a second stop for dessert or a nightcap.",
+      "Works well for mixed budgets and varied food preferences.",
+      "Easy rideshare in/out.",
     ],
   },
 ];

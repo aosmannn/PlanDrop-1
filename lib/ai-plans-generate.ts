@@ -11,6 +11,12 @@ import {
   DEFAULT_RADIUS_MILES,
   radiusMilesToMeters,
 } from "@/lib/search-radius";
+import {
+  getOccasionDef,
+  normalizeOccasionId,
+  occasionPlacesBoost,
+  type PlanOccasionId,
+} from "@/lib/plan-occasion";
 import { coverForVibe, metaClassForVibe } from "@/lib/vibe-assets";
 
 type ClaudePlan = {
@@ -48,6 +54,77 @@ function makeId(): string {
   return `ai-${u}`;
 }
 
+function sharpenActivityBullets(
+  details: string[],
+  venueName: string,
+  vibe: VibeId,
+): string[] {
+  const cleaned = (venueName || "")
+    .replace(/\s*\([^)]*\)\s*$/, "")
+    .trim();
+  const shortVenue =
+    cleaned.split(/[—–-]/)[0]?.trim() || cleaned || "this stop";
+
+  const isPlaceholder = (s: string) =>
+    /^local highlight\s+\d+/i.test(s) ||
+    /^generic\b/i.test(s) ||
+    s.trim().length < 18;
+
+  /** Model often writes scenic but non-specific copy (“many outfitters…”) — tie it to the named place. */
+  const isVagueOutdoorCopy = (s: string) =>
+    /\bone of the many\b/i.test(s) ||
+    /\bfrom one of the many\b/i.test(s) ||
+    (/\bmany\b/i.test(s) &&
+      /\b(outfitters?|operators?|rentals?|vendors?)\b/i.test(s)) ||
+    (/\b(scenic shoreline|quiet coves|designated beach)\b/i.test(s) &&
+      !s.toLowerCase().includes(shortVenue.toLowerCase().slice(0, 8)));
+
+  const templates: Record<VibeId, string[]> = {
+    chill: [
+      `Grab drinks or small plates at ${shortVenue} — order a few things for the table to pass.`,
+      `Walk the main public stretch around ${shortVenue} for ~10 minutes, then settle in somewhere quiet.`,
+    ],
+    foodie: [
+      `Order the signature item at ${shortVenue} plus one “wildcard” dish for the group to split.`,
+      `If lines are long, split up: one person orders while someone else secures a table nearby.`,
+    ],
+    active: [
+      `Start with an easy loop from ${shortVenue}; add distance only if everyone still has energy.`,
+      `Pick a 15‑minute meet‑back point at ${shortVenue} before anyone peels off.`,
+    ],
+    adv: [
+      `Confirm hours, tickets, or gear at ${shortVenue} first — do the headline experience before add‑ons.`,
+      `Have a Plan B near ${shortVenue} if crowds or weather spike (same vibe, less friction).`,
+    ],
+  };
+
+  let tIdx = 0;
+  const out = details.map((line) => {
+    const rawLine = line.trim();
+    if (!rawLine) return rawLine;
+    if (isVagueOutdoorCopy(rawLine)) {
+      if (vibe === "active" || vibe === "adv") {
+        return `At ${shortVenue}: confirm rental hours and group-friendly options (or walk-ins), then pick a simple route everyone can handle.`;
+      }
+      if (vibe === "foodie") {
+        return `Near ${shortVenue}: grab something easy to share, then keep the group within one or two stops so nobody gets split up.`;
+      }
+      return `Around ${shortVenue}: pick one main thing to do first, then optional extras if the group still has time.`;
+    }
+    if (isPlaceholder(rawLine)) {
+      const alt = templates[vibe][tIdx % templates[vibe].length]!;
+      tIdx += 1;
+      return alt;
+    }
+    const hint = shortVenue.slice(0, Math.min(12, shortVenue.length));
+    if (hint && !rawLine.toLowerCase().includes(hint.toLowerCase())) {
+      return `${rawLine} — focused at ${shortVenue}.`;
+    }
+    return rawLine;
+  });
+  return out.slice(0, 6);
+}
+
 function toPlan(raw: ClaudePlan, index: number): Plan {
   const vibe: VibeId = isVibe(raw.vibe) ? raw.vibe : "chill";
   const min = Math.max(2, Math.min(8, Math.floor(raw.minGroup) || 2));
@@ -68,14 +145,17 @@ function toPlan(raw: ClaudePlan, index: number): Plan {
   const stop = `${placeName} — ${meet}`;
 
   const details = Array.isArray(raw.locationDetails)
-    ? raw.locationDetails.slice(0, 6).filter((s) => typeof s === "string" && s.trim())
+    ? raw.locationDetails.slice(0, 8).filter((s) => typeof s === "string" && s.trim())
     : [];
   const padded =
-    details.length >= 4
+    details.length >= 5
       ? details
       : [
           ...details,
-          ...Array.from({ length: 4 - details.length }, (_, i) => `Local highlight ${i + 1} at this stop.`),
+          ...Array.from(
+            { length: Math.max(0, 5 - details.length) },
+            (_, i) => `Local highlight ${i + 1} at this stop.`,
+          ),
         ];
 
   const detailCount = padded.slice(0, 6).filter(Boolean).length;
@@ -103,7 +183,6 @@ function toPlan(raw: ClaudePlan, index: number): Plan {
     minGroup: min,
     maxGroup: max,
     available: true,
-    viewing: 3 + Math.floor(Math.random() * 8),
     locationDetails: padded.slice(0, 6),
     poolExpiresAt,
   };
@@ -134,6 +213,7 @@ async function enrichPlanWithGooglePlace(
   lat?: number,
   lng?: number,
   radiusMeters?: number,
+  placesSearchBoost?: string,
 ): Promise<Plan> {
   if (!process.env.GOOGLE_PLACES_API_KEY?.trim()) {
     return { ...plan, galleryImageSrcs: vibeGalleryFallbacks(plan, planIndex) };
@@ -156,11 +236,11 @@ async function enrichPlanWithGooglePlace(
         }
       : undefined;
 
-  let place = await findPlaceByText(
-    `${placeQuery} ${area}`,
-    loc,
-    placeQuery,
-  );
+  const boost = placesSearchBoost?.trim();
+  const primaryQuery = boost
+    ? `${placeQuery} ${area} ${boost}`.replace(/\s+/g, " ").trim()
+    : `${placeQuery} ${area}`;
+  let place = await findPlaceByText(primaryQuery, loc, placeQuery);
   if (!place?.photoRef) {
     place = await findPlaceByText(placeQuery, loc, placeQuery);
   }
@@ -174,7 +254,7 @@ async function enrichPlanWithGooglePlace(
   const price = formatPriceFromMaps(place.priceLevel, aiPriceEstimate);
 
   const cityLine = area.split(",")[0]?.trim() || area;
-  const activityBullets = plan.locationDetails.slice(0, 4).filter(Boolean);
+  const activityBullets = plan.locationDetails.slice(0, 8).filter(Boolean);
 
   const searchRefs =
     place.photoRefs && place.photoRefs.length > 0
@@ -207,13 +287,23 @@ async function enrichPlanWithGooglePlace(
   const formattedAddress =
     detailsExtra?.formattedAddress?.trim() || place.formattedAddress;
 
+  const rating =
+    detailsExtra?.rating ?? place.rating;
+  const userTotals =
+    detailsExtra?.userRatingsTotal ?? place.userRatingsTotal;
+  const sharpened = sharpenActivityBullets(
+    activityBullets,
+    place.name,
+    plan.vibe,
+  );
+
   const next: Plan = {
     ...plan,
     stop,
     price,
     photoCredit: `${place.name} - ${cityLine}`,
     coverImageAlt: `${place.name} — ${cityLine}`,
-    locationDetails: activityBullets,
+    locationDetails: sharpened,
     formattedAddress,
     placeId: place.placeId,
     mapsUrl: detailsExtra?.mapsUrl,
@@ -221,6 +311,9 @@ async function enrichPlanWithGooglePlace(
     placeLng: detailsExtra?.lng,
     openingHoursLine: detailsExtra?.openingHoursLine,
     openingHoursWeekday: detailsExtra?.weekdayText,
+    placeRating: rating,
+    placeUserRatingsTotal: userTotals,
+    placeReviews: detailsExtra?.reviews,
   };
 
   if (refs.length > 0) {
@@ -241,6 +334,10 @@ async function enrichPlanWithGooglePlace(
   return next;
 }
 
+export type GenerateAiPlansOptions = {
+  occasionId?: string;
+};
+
 /**
  * Calls Claude + optional Places enrichment. Requires ANTHROPIC_API_KEY.
  */
@@ -249,6 +346,7 @@ export async function generateAiPlansForArea(
   lat?: number,
   lng?: number,
   radiusMiles?: number,
+  options?: GenerateAiPlansOptions,
 ): Promise<Plan[]> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key?.trim()) {
@@ -267,24 +365,51 @@ export async function generateAiPlansForArea(
   const radiusMetersForPlaces =
     lat != null && lng != null ? radiusMilesToMeters(miles) : undefined;
 
+  const occasionId: PlanOccasionId = normalizeOccasionId(options?.occasionId);
+  const occasionDef = getOccasionDef(occasionId);
+  const placesBoost =
+    occasionId === "surprise" ? "" : occasionPlacesBoost(occasionId);
+
   const locHint =
     lat != null && lng != null
       ? `User coordinates (bias search): ${lat.toFixed(4)}, ${lng.toFixed(4)}. Prefer venues within roughly ${miles} miles of this point. Use coordinates with the place name to judge density—dense urban cores can support more distinct venues; exurban or rural pins should usually mean fewer plans.`
       : `Prefer venues within about ${miles} miles of "${trimmedArea}".`;
 
+  const model =
+    process.env.ANTHROPIC_MODEL?.trim() ||
+    "claude-sonnet-4-6";
+
+  const occasionBlock =
+    occasionId !== "surprise"
+      ? `
+USER OCCASION: "${occasionDef.label}" (${occasionId}).
+${occasionDef.promptHint}
+
+CRITICAL: Every plan must match this occasion. Do not mix in outings that would feel off-theme for "${occasionDef.label}". Still vary neighborhoods, venue types, and micro-vibes within the same occasion.
+- Still output 2–8 plans with distinct real venues on Google Maps within ~${miles} miles; no duplicate primaryPlaceName.
+- Set the \`vibe\` field to chill|active|foodie|adv only when it fits the occasion; pick the closest matching vibes when the occasion is narrow.
+`
+      : "";
+
+  const vibeRule =
+    occasionId === "surprise"
+      ? `- Across the plans you include, diversify vibes (chill, active, foodie, adv) as much as the count allows—use each vibe at most once when you have enough plans; if you output fewer than four plans, prioritize variety over covering every vibe.`
+      : `- All plans must align with the USER OCCASION block above.`;
+
   const prompt = `You are a local outing planner for "${trimmedArea}".
 ${locHint}
+${occasionBlock}
 
 Return ONLY valid JSON (no markdown outside the JSON) with this exact shape:
-{"plans":[{"title":"string","tagline":"string","priceEstimate":"string: use \"Free\" for no paid admission (parks, plazas, exterior walks); otherwise a realistic per-person estimate like ~$28/pp or ~$35–50/pp for food halls","vibe":"chill|active|foodie|adv","minGroup":number,"maxGroup":number,"duration":"string like 2.5 hrs","meetTime":"string like 6:30 PM","primaryPlaceName":"string","locationDetails":["string","string","string","string"],"photoCredit":"short label"}]}
+{"plans":[{"title":"string","tagline":"string","priceEstimate":"string: use \"Free\" for no paid admission (parks, plazas, exterior walks); otherwise a realistic per-person estimate like ~$28/pp or ~$35–50/pp for food halls","vibe":"chill|active|foodie|adv","minGroup":number,"maxGroup":number,"duration":"string like 2.5 hrs","meetTime":"string like 6:30 PM","primaryPlaceName":"string","locationDetails":["string","string","string","string","string"],"photoCredit":"short label"}]}
 
 STRICT RULES (must follow):
 - Output between 2 and 8 plans. Choose how many based on the area: dense cities and major destinations usually support more distinct real venues for one evening; small towns, very suburban, or sparse areas should have fewer—only as many as you can make strong and non-redundant. Never pad with weak plans or duplicate the same kind of night twice.
-- Across the plans you include, diversify vibes (chill, active, foodie, adv) as much as the count allows—use each vibe at most once when you have enough plans; if you output fewer than four plans, prioritize variety over covering every vibe.
+${vibeRule}
 - Each plan must be anchored to ONE real venue or park that exists within ~${miles} miles of the user's area (or their coordinates when given) and can be found on Google Maps.
 - primaryPlaceName MUST be the official name as listed on Google Maps (e.g. "Ponce City Market", "Piedmont Park", "Krog Street Market", "Mercedes-Benz Stadium"). Not a made-up place name.
 - title and tagline MUST describe that same primaryPlaceName only. Do not title a plan after Neighborhood A while primaryPlaceName is a venue in Neighborhood B.
-- locationDetails: four bullets about what to do at that exact place or its immediate doorstep (same block / connected trail segment). No contradictory scenes (e.g. do not describe a record shop interior if the place is a stadium).
+- locationDetails: **five or six bullets**, each **one clear sentence** about what to do at that exact place or its immediate doorstep (same block / connected trail segment). Mention **primaryPlaceName** in at least **two** bullets. No vague filler (“enjoy the vibes”). No contradictory scenes (e.g. do not describe a record shop interior if the place is a stadium).
 - meetTime: a single meet time or window (e.g. "6:30 PM" or "10:00 AM").
 - priceEstimate: Use the exact word Free when the outing needs no ticket or paid admission. For dining or paid venues, give an approximate per-person range typical for that area (e.g. ~$40/pp or ~$30–45/pp). Maps price level may refine this server-side.
 - Do not repeat the same primaryPlaceName in two plans.`;
@@ -297,7 +422,7 @@ STRICT RULES (must follow):
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model,
       max_tokens: 4096,
       messages: [{ role: "user", content: prompt }],
     }),
@@ -305,8 +430,19 @@ STRICT RULES (must follow):
 
   if (!res.ok) {
     const errText = await res.text();
-    console.error("Anthropic error", res.status, errText);
-    throw new Error("Could not generate plans. Try again in a moment.");
+    let apiMessage = errText.slice(0, 500);
+    try {
+      const j = JSON.parse(errText) as {
+        error?: { type?: string; message?: string };
+      };
+      if (j.error?.message) apiMessage = j.error.message;
+    } catch {
+      /* keep raw snippet */
+    }
+    console.error("Anthropic error", model, res.status, errText);
+    throw new Error(
+      `Could not generate plans (${res.status}). ${apiMessage}`,
+    );
   }
 
   const data = (await res.json()) as {
@@ -346,6 +482,7 @@ STRICT RULES (must follow):
         lat,
         lng,
         radiusMetersForPlaces,
+        placesBoost || undefined,
       );
     }),
   );
