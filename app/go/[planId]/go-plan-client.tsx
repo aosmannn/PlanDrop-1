@@ -168,17 +168,19 @@ export function GoPlanClient({
     const rad = getStoredRadiusMiles();
     const qs = buildGoShareQuery(plan, areaHint, rad);
     setShareUrl(qs ? `${origin}/go/${plan.id}?${qs}` : `${origin}/go/${plan.id}`);
-    const supa = getSupabaseBrowser();
-    const authed = await supa.auth
-      .getUser()
-      .catch(() => ({ data: { user: null } }));
-    const sid = authed?.data?.user?.id || getSessionId();
-    if (!sid) {
-      setVenueCode(null);
-      return;
-    }
+    let cancelled = false;
     (async () => {
       try {
+        const supa = getSupabaseBrowser();
+        const authed = await supa.auth
+          .getUser()
+          .catch(() => ({ data: { user: null } }));
+        const sid = authed?.data?.user?.id || getSessionId();
+        if (!sid) {
+          if (!cancelled) setVenueCode(null);
+          return;
+        }
+
         const claimKey = getClaimKey();
         const res = await fetch("/api/venue-code/issue", {
           method: "POST",
@@ -191,11 +193,14 @@ export function GoPlanClient({
         });
         if (!res.ok) throw new Error("issue_failed");
         const j = (await res.json()) as { code?: string };
-        setVenueCode(typeof j.code === "string" ? j.code : null);
+        if (!cancelled) setVenueCode(typeof j.code === "string" ? j.code : null);
       } catch {
-        setVenueCode(null);
+        if (!cancelled) setVenueCode(null);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [plan, areaHint]);
 
   useEffect(() => {
